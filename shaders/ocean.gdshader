@@ -58,15 +58,27 @@ void vertex() {
 // image (periodic interference). Gradient noise is smooth AND aperiodic; each octave is
 // rotated, scaled by a non-integer factor and drifts its own way, so nothing lines up.
 
-// Integer hash (stable at large world coordinates, unlike the classic sin() hash).
+// MurmurHash3 32-bit finalizer (Austin Appleby; public domain).
+uint fmix32(uint h) {
+	h ^= h >> 16u;
+	h *= 2246822507u;
+	h ^= h >> 13u;
+	h *= 3266489909u;
+	h ^= h >> 16u;
+	return h;
+}
+
+// Integer hash of a lattice point to a gradient in [-1, 1]^2 (stable at large world
+// coordinates, unlike the classic sin() hash).
 vec2 hash2(vec2 p) {
-	uvec2 q = uvec2(ivec2(p) + ivec2(32768)) * uvec2(1597334673u, 3812015801u);
-	uint n = (q.x ^ q.y) * 1597334673u;
-	uvec2 r = uvec2(n, n * 48271u);
-	return vec2(r) * (2.0 / 4294967295.0) - 1.0;
+	uvec2 q = uvec2(ivec2(p) + ivec2(32768));
+	uint a = fmix32(q.x * 2654435769u ^ fmix32(q.y));
+	uint b = fmix32(a ^ 1759714724u);
+	return vec2(float(a), float(b)) * (2.0 / 4294967295.0) - 1.0;
 }
 
 // Gradient noise with analytic derivatives: returns (value, d/dx, d/dy).
+// Technique after Inigo Quilez's "gradient noise derivatives" article (MIT); see CREDITS.md.
 vec3 noised(vec2 p) {
 	vec2 i = floor(p);
 	vec2 f = fract(p);

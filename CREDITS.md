@@ -1,0 +1,29 @@
+# Credits and third-party notices
+
+Barrels of Silver is original work. It contains no assets, names, music, UI art or
+writing from any other game. All geometry, textures, particles and shaders are
+generated in code in this repository.
+
+Anything in the game that comes from someone else is listed here. Keep this file up to
+date whenever a third-party asset, font, sound or code snippet is added. The shipped
+game's credits screen must show the notices in this file.
+
+## Engine
+
+**Godot Engine**: MIT License.
+Copyright (c) 2014-present Godot Engine contributors.
+Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.
+Full text: https://godotengine.org/license/
+
+Godot bundles third-party components, including the default UI font this game currently
+uses for the HUD. Their licenses are in Godot's `COPYRIGHT.txt` and are available at
+runtime through `Engine.get_copyright_info()` and `Engine.get_license_info()`. The
+credits screen should list them too.
+
+## Code techniques
+
+- **Gradient noise with analytic derivatives** (`shaders/ocean.gdshader`): implementation
+  follows the technique described by Inigo Quilez (https://iquilezles.org/articles/morenoise/).
+  His site states that code implementing an algorithm is MIT-licensed.
+  MIT License, Copyright (c) Inigo Quilez.
+- **MurmurHash3 finalizer** (`shaders/ocean.gdshader`): Austin Appleby, public domain.

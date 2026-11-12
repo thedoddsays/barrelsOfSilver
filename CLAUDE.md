@@ -13,7 +13,10 @@ Flag-style ship combat and looks), so systems built here should carry forward.
   exports from Linux don't need rcedit/Wine.
 - **May be sold on Steam later.** Use NO Firaxis/2K material: no assets, names ("Pirates!",
   "Sid Meier"), music, UI art or writing from the original. Mechanics-inspired only. Godot's
-  MIT notice must ship in credits. Keep any modding of the original game completely separate.
+  MIT notice must ship in credits. **Every third-party asset, font, sound or code snippet goes
+  in `CREDITS.md` with its license. Only use code or assets with a confirmed permissive
+  license (MIT/BSD/Apache/CC0/public domain/OFL); if you can't confirm the license, write
+  it ourselves instead.** Owner requires unique assets (legal risk). Keep any modding of the original game completely separate.
 - Owner tests on Windows 11 (and Mint). Ask them to paste errors from Godot's Output /
   Debugger panels.
 
