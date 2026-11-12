@@ -1,0 +1,6 @@
+.godot/
+build/
+*.translation
+
+# Old source snapshot (superseded by git history)
+pirates_slice.zip
