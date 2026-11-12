@@ -29,6 +29,18 @@ Flag-style ship combat and looks), so systems built here should carry forward.
 - Priority order for visual work: water, then lighting/post, then ship models and sails, then
   VFX, then islands.
 
+## Design docs
+- `docs/ship-roster.md`: 20 ship types, stats, rig profiles, rarity, fleet, art scope (v3,
+  owner decisions made 2026-11-12: sloop start, fleet of 3–4, all tiers in release 1).
+- `docs/famous-pirates.md`: historical pirates and their unique ships at real sizes (draft v1).
+  Depict real pirates from the historical record only, never from modern media (AC4: Black Flag,
+  Pirates of the Caribbean, Black Sails, Our Flag Means Death). Edward Kenway is Ubisoft's, never use.
+- **Rule: every ship at sea can be captured and sailed by the player; no enemy-only ships.**
+  Balance strong ships through their capture difficulty and costs (crew, upkeep, draft, navy
+  attention), never by making them off-limits. Every tier, from a periagua to a 1st rate, is a
+  real option, gated by rarity and difficulty. The era is loose (Caribbean, c. 1650–1800),
+  not strict history.
+
 ## Current state (milestone 2 in progress: broadside combat vs. one AI ship)
 - The world is **built in code at runtime** (`scripts/main.gd`), so the editor viewport of
   `main.tscn` is empty. Press F5 to see it. A planned improvement is making it visible/editable
