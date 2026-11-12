@@ -43,7 +43,7 @@ var ocean: Ocean
 @export var lateral_drag := 40000.0
 
 @export_group("Sailing")
-## Pirates!-style "game scale": ships move much faster than real ones so crossing the
+## Arcade "game scale": ships move much faster than real ones so crossing the
 ## map stays fun. Top speed is roughly 12 m/s on a broad reach in a good wind.
 @export var max_thrust := 160000.0
 @export var rudder_torque := 380000.0
@@ -183,14 +183,15 @@ func gun_position(side: int, gun: int) -> Vector3:
 	return global_transform * Vector3(GUN_X * side, GUN_Y, GUN_Z[gun])
 
 
-## World velocity of a ball leaving a gun on `side` (includes the ship's own motion).
+## World velocity of a ball leaving a gun on `side`. Deliberately does NOT add the
+## ship's own motion: balls fly square to the hull, so the firing arcs stay fixed
+## relative to the ship and aiming is just "point the broadside at them".
 func shot_velocity(side: int, ammo: int, yaw_jitter_deg := 0.0, pitch_jitter_deg := 0.0) -> Vector3:
 	var a: Dictionary = AMMO[ammo]
 	var speed: float = a["speed"]
 	var elev := deg_to_rad(float(a["elevation"]) + pitch_jitter_deg)
 	var out := side_dir(side).rotated(Vector3.UP, deg_to_rad(yaw_jitter_deg))
-	var v := (out * cos(elev) + Vector3.UP * sin(elev)) * speed
-	return v + Vector3(linear_velocity.x, 0.0, linear_velocity.z)
+	return (out * cos(elev) + Vector3.UP * sin(elev)) * speed
 
 
 ## Approximate distance at which a ball of this type hits the water.
@@ -299,7 +300,7 @@ func _physics_process(delta: float) -> void:
 	apply_torque(fwd * cross * heel_torque)
 
 	# --- Rudder ---------------------------------------------------------------
-	var authority := 0.25 + 0.75 * clampf(absf(_v_fwd) / full_rudder_speed, 0.0, 1.0)
+	var authority := 0.5 + 0.5 * clampf(absf(_v_fwd) / full_rudder_speed, 0.0, 1.0)
 	apply_torque(Vector3.UP * -steer_input * rudder_torque * authority * wet_frac)
 
 
@@ -332,20 +333,23 @@ func _fire_gun(side: int, gun: int, ammo: int) -> void:
 	apply_impulse(-out * 2500.0, muzzle - global_position)  # recoil rocks the hull
 
 
-## Square-riggers can't point high: dead in irons inside ~40 degrees of the wind,
-## happiest on a broad reach, a touch slower dead downwind.
+## Arcade-forgiving point-of-sail curve: slow but never stopped dead head to wind
+## (so you keep steerage and can always turn out of it), best on a broad reach,
+## a touch slower dead downwind.
+const IRONS_DEG := 30.0
+
 func _efficiency(off_deg: float) -> float:
-	if off_deg < 40.0:
-		return 0.0
+	if off_deg < IRONS_DEG:
+		return remap(off_deg, 0.0, IRONS_DEG, 0.25, 0.35)
 	if off_deg < 90.0:
-		return remap(off_deg, 40.0, 90.0, 0.0, 0.8)
+		return remap(off_deg, IRONS_DEG, 90.0, 0.35, 0.85)
 	if off_deg < 135.0:
-		return remap(off_deg, 90.0, 135.0, 0.8, 1.0)
-	return remap(off_deg, 135.0, 180.0, 1.0, 0.85)
+		return remap(off_deg, 90.0, 135.0, 0.85, 1.0)
+	return remap(off_deg, 135.0, 180.0, 1.0, 0.9)
 
 
 func _point_of_sail_name(off_deg: float) -> String:
-	if off_deg < 40.0:
+	if off_deg < IRONS_DEG:
 		return "In irons"
 	if off_deg < 70.0:
 		return "Close-hauled"
@@ -480,7 +484,7 @@ func _build_wake() -> void:
 	_wake.mesh = Fx.particle_quad()
 
 	var ramp := Gradient.new()
-	ramp.set_color(0, Color(1.0, 1.0, 1.0, 0.7))
+	ramp.set_color(0, Color(1.0, 1.0, 1.0, 0.45))
 	ramp.set_color(1, Color(1.0, 1.0, 1.0, 0.0))
 	_wake.color_ramp = ramp
 	add_child(_wake)

@@ -6,6 +6,7 @@ static var _quad: QuadMesh
 
 
 ## Shared billboard quad that takes its colour from the particle colour ramp.
+## A soft radial-falloff texture makes each particle a round puff instead of a square.
 static func particle_quad() -> QuadMesh:
 	if _quad == null:
 		_quad = QuadMesh.new()
@@ -14,8 +15,49 @@ static func particle_quad() -> QuadMesh:
 		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 		m.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
 		m.vertex_color_use_as_albedo = true
+		m.albedo_texture = _soft_dot()
 		_quad.material = m
 	return _quad
+
+
+static func _soft_dot() -> GradientTexture2D:
+	var g := Gradient.new()
+	g.offsets = PackedFloat32Array([0.0, 0.35, 1.0])
+	g.colors = PackedColorArray([Color(1, 1, 1, 1), Color(1, 1, 1, 0.6), Color(1, 1, 1, 0)])
+	var t := GradientTexture2D.new()
+	t.gradient = g
+	t.fill = GradientTexture2D.FILL_RADIAL
+	t.fill_from = Vector2(0.5, 0.5)
+	t.fill_to = Vector2(1.0, 0.5)
+	t.width = 64
+	t.height = 64
+	return t
+
+
+## Continuous smoke trail behind a cannonball so its flight is easy to follow.
+static func ball_trail() -> CPUParticles3D:
+	var p := CPUParticles3D.new()
+	p.amount = 40
+	p.lifetime = 0.7
+	p.local_coords = false
+	p.mesh = particle_quad()
+	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	p.direction = Vector3.UP
+	p.spread = 180.0
+	p.initial_velocity_min = 0.0
+	p.initial_velocity_max = 0.4
+	p.gravity = Vector3.ZERO
+	p.scale_amount_min = 0.7
+	p.scale_amount_max = 1.1
+	var curve := Curve.new()
+	curve.add_point(Vector2(0.0, 0.6))
+	curve.add_point(Vector2(1.0, 1.6))
+	p.scale_amount_curve = curve
+	var ramp := Gradient.new()
+	ramp.set_color(0, Color(0.95, 0.93, 0.88, 0.75))
+	ramp.set_color(1, Color(0.85, 0.85, 0.85, 0.0))
+	p.color_ramp = ramp
+	return p
 
 
 static func muzzle(parent: Node, pos: Vector3, out: Vector3) -> void:

@@ -1,4 +1,4 @@
-# Pirates Slice: context for Claude Code
+# Barrels of Silver: context for Claude Code
 
 ## What this is
 A smaller, shippable spiritual successor to **Sid Meier's Pirates! (2004)**: modern visuals,
@@ -48,6 +48,16 @@ Flag-style ship combat and looks), so systems built here should carry forward.
   - Headless soak test: AI closes from ~280 m and sinks a stationary player in ~2.5 min.
   - Testing tip: `--script` test harnesses must not reference project class_names by type
     (they compile before the `Wind` autoload exists); use untyped vars.
+
+- **Combat playtest 1 (2026-11-12):** owner said the AI was fine; the problems were look and feel. Fixed:
+  - Particles were untextured quads ("big white squares"): `Fx.particle_quad()` now uses a soft radial
+    texture. Cannonballs are drawn 2× larger (visual only) and leave a smoke trail (`Fx.ball_trail()`).
+  - Aim arcs flickered: the side now has hysteresis near bow/stern, and shots no longer inherit ship velocity
+    (arcs stay square to the hull; the AI leads using target velocity only). Arcs also get a filled zone on the water.
+  - Upwind was too punishing: head to wind now gives 25–35% thrust (was 0 inside 40°), irons is <30°,
+    and the rudder keeps 50% bite at zero speed (was 25%).
+  - Godot on the dev box: `C:\Users\Stephen\Documents\Tools\Godot\Godot_v4.7.2-stable_win64.exe\` is a
+    *folder*; the console exe is inside it.
 
 ## Open issues / feedback from last playtest
 - ~~"Very pixelated" visuals~~: resolved. Owner confirmed (2026-11-12) the water looks much

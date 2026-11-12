@@ -110,10 +110,11 @@ func _try_fire() -> void:
 	var gun_range := Ship.ammo_range(_ammo)
 	if dist > gun_range * 0.95:
 		return
-	# Lead the target: the ball carries our own velocity, so use relative motion.
+	# Lead the target. Balls leave square to the hull and don't carry our own
+	# velocity, so only the target's motion matters.
 	var a: Dictionary = Ship.AMMO[_ammo]
 	var flight := dist / (float(a["speed"]) * 0.98)
-	var lead := to + _flat(target.linear_velocity - ship.linear_velocity) * flight
+	var lead := to + _flat(target.linear_velocity) * flight
 	# Only fire when the target fits inside the cone, so far shots need a finer aim.
 	var tolerance := clampf(atan2(TARGET_HALF_WIDTH, dist), 0.03, 0.14)
 	for side: int in [-1, 1]:

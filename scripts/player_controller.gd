@@ -22,6 +22,7 @@ func _ready() -> void:
 	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	m.vertex_color_use_as_albedo = true
 	m.no_depth_test = true  # stay visible through wave crests
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
 	_arc_view.material_override = m
 	add_child(_arc_view)  # parent is a plain Node, so this sits in world space
 
@@ -72,7 +73,15 @@ func _update_aim_side() -> void:
 		return  # cursor is on the sky
 	var hit := origin + dir * (-origin.y / dir.y)
 	var rel := hit - ship.global_position
-	aim_side = 1 if rel.dot(ship.global_basis.x) >= 0.0 else -1
+	rel.y = 0.0
+	var lateral := rel.dot(ship.side_dir(1))
+	# Hysteresis: only swap sides once the cursor is clearly across the centreline
+	# (a few metres, widening with distance ahead/astern), so the arcs don't flicker
+	# when the cursor sits near the bow or stern.
+	var along := absf(rel.dot(ship.side_dir(1).cross(Vector3.UP)))
+	var margin := 3.0 + along * 0.25
+	if lateral * aim_side < -margin:
+		aim_side = -aim_side
 
 
 ## One ballistic arc per gun out to where the ball lands, joined across the ends.
@@ -81,10 +90,12 @@ func _draw_arcs() -> void:
 	var loaded := ship.can_fire(aim_side)
 	var col := Color(1.0, 0.95, 0.75, 0.55) if loaded else Color(1.0, 0.45, 0.35, 0.22)
 	var step := 0.05
+	var starts: Array[Vector3] = []
 	var ends: Array[Vector3] = []
 	_arcs.surface_begin(Mesh.PRIMITIVE_LINES)
 	for g in Ship.GUN_Z.size():
 		var p := ship.gun_position(aim_side, g)
+		starts.append(p)
 		var v := ship.shot_velocity(aim_side, ammo)
 		for i in 80:
 			var prev := p
@@ -97,6 +108,25 @@ func _draw_arcs() -> void:
 	for i in ends.size() - 1:
 		_line(ends[i], ends[i + 1], col)
 	_arcs.surface_end()
+
+	# Translucent danger zone on the water between the guns and the fall of shot.
+	var fill := Color(col, col.a * 0.35)
+	var near := Color(col, 0.0)
+	_arcs.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
+	for i in starts.size() - 1:
+		var a0 := Vector3(starts[i].x, 0.2, starts[i].z)
+		var a1 := Vector3(starts[i + 1].x, 0.2, starts[i + 1].z)
+		var b0 := Vector3(ends[i].x, 0.2, ends[i].z)
+		var b1 := Vector3(ends[i + 1].x, 0.2, ends[i + 1].z)
+		_tri(a0, near, b0, fill, b1, fill)
+		_tri(a0, near, b1, fill, a1, near)
+	_arcs.surface_end()
+
+
+func _tri(a: Vector3, ca: Color, b: Vector3, cb: Color, c: Vector3, cc: Color) -> void:
+	for pair in [[a, ca], [b, cb], [c, cc]]:
+		_arcs.surface_set_color(pair[1])
+		_arcs.surface_add_vertex(pair[0])
 
 
 func _line(a: Vector3, b: Vector3, col: Color) -> void:
