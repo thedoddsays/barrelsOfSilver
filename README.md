@@ -1,7 +1,7 @@
-# Pirates Slice
+# Barrels of Silver
 
-Top-down age-of-sail prototype in Godot 4.7+. Milestone 1: a modern-looking ocean and one
-ship that sails by the wind. Builds natively for **Linux (Mint)** and **Windows 11**.
+Top-down age-of-sail pirate game in Godot 4.7+ (working title). So far: a modern-looking
+ocean, a ship that sails by the wind, and broadside combat against an AI ship. Builds natively for **Linux (Mint)** and **Windows 11**.
 
 ## Run it (Linux Mint)
 
@@ -19,9 +19,10 @@ No Vulkan? Run with `--rendering-driver opengl3` (it will look simpler).
 2. Download **Godot 4.7.x – Windows, standard build** (not .NET) from godotengine.org.
    It's a zip with no installer: extract it somewhere permanent, e.g. `C:\Tools\Godot\`.
    Optional: right-click the `.exe` → *Show more options* → *Send to → Desktop (create shortcut)*.
-3. Extract `pirates_slice.zip` somewhere **outside OneDrive-synced folders** (e.g. `C:\Dev\pirates_slice`).
+3. Clone the repo somewhere **outside OneDrive-synced folders**:
+   `git clone https://github.com/thedoddsays/barrelsOfSilver.git C:\Dev\barrels-of-silver`
    OneDrive locks files while Godot is writing its `.godot` cache and can cause odd import errors.
-4. Launch Godot → **Import** → browse to `pirates_slice\project.godot` → **Import & Edit** → press **F5**.
+4. Launch Godot → **Import** → browse to `barrels-of-silver\project.godot` → **Import & Edit** → press **F5**.
 
 If Windows Defender SmartScreen flags Godot or an exported game: *More info → Run anyway*.
 If the window opens black or crashes, start Godot from a terminal with
@@ -29,9 +30,9 @@ If the window opens black or crashes, start Godot from a terminal with
 
 ### Playing an exported build on Windows
 
-Copy `build\windows\PiratesSlice.exe` anywhere (USB stick, another PC) and double-click it. It's a
+Copy `build\windows\BarrelsOfSilver.exe` anywhere (USB stick, another PC) and double-click it. It's a
 single self-contained file with nothing to install. Settings and saves will live in
-`%APPDATA%\Godot\app_userdata\Pirates Slice\`.
+`%APPDATA%\Godot\app_userdata\Barrels of Silver\`.
 
 ### Building on Windows instead of Mint
 
@@ -66,7 +67,7 @@ One time: in the editor, **Editor → Manage Export Templates → Download and I
 - From Mint, both platforms: `./export.sh` (set `GODOT=/path/to/godot` if it isn't on PATH).
 - Or in the editor: **Project → Export**, pick "Linux" or "Windows Desktop", then Export Project.
 
-Output: `build/linux/PiratesSlice.x86_64` and `build/windows/PiratesSlice.exe`, each a single
+Output: `build/linux/BarrelsOfSilver.x86_64` and `build/windows/BarrelsOfSilver.exe`, each a single
 self-contained file. Windows SmartScreen will warn about the unsigned .exe ("More info → Run
 anyway"); code signing can come later. The Windows icon/version info is off
 (`application/modify_resources=false`) so exporting from Linux doesn't need rcedit/Wine.

@@ -1,6 +1,6 @@
 extends Node3D
 class_name CameraRig
-## Pirates!-style high camera that follows the ship. Zooming in lowers the angle for a
+## Classic high top-down camera that follows the ship. Zooming in lowers the angle for a
 ## more cinematic view; zooming out goes nearly top-down for navigation.
 ## Mouse wheel = zoom, right-drag or Q/E = rotate.
 

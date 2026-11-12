@@ -9,6 +9,6 @@ GODOT="${GODOT:-godot}"
 
 mkdir -p build/linux build/windows
 "$GODOT" --headless --path . --import
-"$GODOT" --headless --path . --export-release "Linux" build/linux/PiratesSlice.x86_64
-"$GODOT" --headless --path . --export-release "Windows Desktop" build/windows/PiratesSlice.exe
-echo "Done: build/linux/PiratesSlice.x86_64 and build/windows/PiratesSlice.exe"
+"$GODOT" --headless --path . --export-release "Linux" build/linux/BarrelsOfSilver.x86_64
+"$GODOT" --headless --path . --export-release "Windows Desktop" build/windows/BarrelsOfSilver.exe
+echo "Done: build/linux/BarrelsOfSilver.x86_64 and build/windows/BarrelsOfSilver.exe"
