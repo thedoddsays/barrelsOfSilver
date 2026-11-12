@@ -17,7 +17,7 @@ Flag-style ship combat and looks), so systems built here should carry forward.
 - Owner tests on Windows 11 (and Mint). Ask them to paste errors from Godot's Output /
   Debugger panels.
 
-## Current state (milestone 1: ocean + one sailable ship)
+## Current state (milestone 2 in progress: broadside combat vs. one AI ship)
 - The world is **built in code at runtime** (`scripts/main.gd`), so the editor viewport of
   `main.tscn` is empty. Press F5 to see it. A planned improvement is making it visible/editable
   in the editor (`@tool` or real scenes).
@@ -36,6 +36,19 @@ Flag-style ship combat and looks), so systems built here should carry forward.
 - `hud.gd`: compass (wind and heading arrows), speed, sails, point of sail, controls.
 - `main.gd`: input map in code, sky/fog/ACES/glow/SSAO, sun, 14 seeded islands with palms.
 
+- **Combat (milestone 2, built 2026-11-12, not yet playtested by owner):**
+  - `Ship` no longer reads input; controllers set `steer_input`, call `sail_up/down()`, `fire(side, ammo)`.
+    Side +1 = starboard (local +X), -1 = port. `Ship.AMMO` table holds ballistics + damage.
+  - `player_controller.gd`: left click fires the side facing the mouse (owner chose mouse
+    over keys; Q/E stay camera rotate); 1/2/3 ammo; draws firing arcs (ImmediateMesh).
+  - `ai_captain.gd`: circles target at 0.6 × ammo range, picks orbit side by readiness,
+    wears ship instead of tacking, ray-based island avoidance, flees when losing badly.
+  - `cannonball.gd` (manual ballistics; hit test via `Ship.contains_point`, islands via ray on
+    `Ship.LAYER_WORLD`), `fx.gd` (one-shot CPUParticles3D). Main spawns one enemy at a time.
+  - Headless soak test: AI closes from ~280 m and sinks a stationary player in ~2.5 min.
+  - Testing tip: `--script` test harnesses must not reference project class_names by type
+    (they compile before the `Wind` autoload exists); use untyped vars.
+
 ## Open issues / feedback from last playtest
 - ~~"Very pixelated" visuals~~: resolved. Owner confirmed (2026-11-12) the water looks much
   better after the switch to sine ripples + distance fade.
@@ -45,7 +58,7 @@ Flag-style ship combat and looks), so systems built here should carry forward.
 
 ## Planned next steps
 1. ~~Confirm sailing feel and visual quality on the owner's machine.~~ Done 2026-11-12.
-2. Broadside cannon combat vs. an AI ship (ammo types; sail/hull/crew damage).
+2. Broadside cannon combat vs. an AI ship (ammo types; sail/hull/crew damage). Built; awaiting playtest.
 3. Make the world editable in the editor; real ship models.
 4. Ports (trade, tavern, governor/nation reputation), boarding duel minigame, light
    campaign (aging, fame, treasure hunts). Scope: one region, 6–8 ports.

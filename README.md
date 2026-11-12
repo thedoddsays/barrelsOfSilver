@@ -44,12 +44,20 @@ then *Project → Export → Windows Desktop → Export Project*. You can export
 |---|---|
 | A / D | Steer |
 | W / S | More / less sail (furled → battle sails → full) |
+| Left click | Fire the broadside on the side facing the mouse cursor |
+| 1 / 2 / 3 | Ammo: round shot (hull) / chain shot (sails) / grape shot (crew, short range) |
 | Q / E, right-drag | Rotate camera |
+| R | Sail again after your ship sinks |
 | Mouse wheel | Zoom (closer = lower, more cinematic angle) |
 | F11 / Esc | Fullscreen / quit |
 
 You can't sail within ~40° of the wind. A broad reach is fastest. The blue compass
 arrow shows where the wind is blowing toward; the orange one is your heading.
+
+**Combat:** an enemy ship hunts you; a new one arrives 10 s after each sinking. The lines
+drawn from your guns show where the broadside will go (bright = loaded, dim red =
+reloading). Each side reloads separately. Damage to sails costs speed; losing crew slows
+reloading and sail handling; a hull at 0% sinks. Red dots on the compass rim are enemies.
 
 ## Build native releases
 
@@ -67,7 +75,11 @@ anyway"); code signing can come later. The Windows icon/version info is off
 
 - `scripts/main.gd`: builds the world (sky, sun, ocean, islands, ship, camera, HUD)
 - `scripts/ocean.gd` + `shaders/ocean.gdshader`: Gerstner waves; CPU height matches GPU
-- `scripts/ship.gd`: buoyancy probes, hull drag, wind thrust by point of sail, rudder, heel
+- `scripts/ship.gd`: buoyancy probes, hull drag, wind thrust by point of sail, rudder, heel,
+  guns/ammo table, hull/sails/crew damage, sinking. Takes no input itself.
+- `scripts/player_controller.gd`: keyboard/mouse → ship; mouse-side aiming; firing arcs
+- `scripts/ai_captain.gd`: enemy AI (circle at fighting range, wind-aware, island avoidance)
+- `scripts/cannonball.gd`, `scripts/fx.gd`: projectiles; smoke/splash/splinter particles
 - `scripts/wind.gd`: global wind (autoload), drifts and gusts
 - `scripts/camera_rig.gd`, `scripts/hud.gd`
 

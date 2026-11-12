@@ -1,26 +1,40 @@
 extends Node3D
-## Builds the prototype world in code: sky, sun, ocean, islands, ship, camera, HUD.
+## Builds the prototype world in code: sky, sun, ocean, islands, ships, camera, HUD.
+## Runs an endless skirmish: one enemy at a time, a new one arrives after each sinking.
 
 const ISLAND_SEED := 1715
+const ENEMY_RESPAWN_DELAY := 10.0
+
+var ocean: Ocean
+var player: Ship
+var hud: Hud
+var ships_sunk := 0
+
+var _islands: Array[Vector3] = []  ## (x, z, radius) of each island
 
 
 func _ready() -> void:
 	_setup_input()
 	_setup_environment()
 
-	var ocean := Ocean.new()
+	ocean = Ocean.new()
 	add_child(ocean)
 
-	var ship := Ship.new()
-	ship.ocean = ocean
-	ship.position = Vector3(0.0, 0.5, 0.0)
+	player = Ship.new()
+	player.ocean = ocean
+	player.free_when_sunk = false
+	player.position = Vector3(0.0, 0.5, 0.0)
 	# Start on a broad reach (wind over the port quarter), the fastest point of sail.
 	var start_heading := wrapf(Wind.angle - deg_to_rad(40.0), 0.0, TAU)
-	ship.rotation.y = -start_heading
-	add_child(ship)
+	player.rotation.y = -start_heading
+	add_child(player)
+
+	var controller := PlayerController.new()
+	controller.ship = player
+	add_child(controller)
 
 	var rig := CameraRig.new()
-	rig.target = ship
+	rig.target = player
 	rig.yaw = -start_heading  # look the way the ship is sailing
 	add_child(rig)
 	ocean.follow_target = rig
@@ -29,10 +43,14 @@ func _ready() -> void:
 
 	var layer := CanvasLayer.new()
 	add_child(layer)
-	var hud := Hud.new()
-	hud.ship = ship
+	hud = Hud.new()
+	hud.ship = player
+	hud.controller = controller
 	hud.camera_rig = rig
+	hud.main = self
 	layer.add_child(hud)
+
+	_spawn_enemy()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -41,6 +59,50 @@ func _unhandled_input(event: InputEvent) -> void:
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED if full else DisplayServer.WINDOW_MODE_FULLSCREEN)
 	elif event.is_action_pressed("quit"):
 		get_tree().quit()
+	elif event.is_action_pressed("restart") and player.is_sunk:
+		get_tree().reload_current_scene()
+
+
+## Place an enemy 260-360 m away in clear water, pointed roughly at the player.
+func _spawn_enemy() -> void:
+	if player.is_sunk:
+		return
+	var pos := Vector3.ZERO
+	for attempt in 40:
+		var a := randf() * TAU
+		pos = player.global_position + Vector3(sin(a), 0.0, -cos(a)) * randf_range(260.0, 360.0)
+		if _clear_of_islands(pos, 40.0):
+			break
+	pos.y = 0.5
+
+	var enemy := Ship.new()
+	enemy.ocean = ocean
+	enemy.max_crew = 50.0
+	enemy.hull_color = Color(0.17, 0.13, 0.11)
+	enemy.sail_color = Color(0.78, 0.74, 0.66)
+	enemy.flag_color = Color(0.7, 0.1, 0.08)
+	enemy.position = pos
+	var to_player := player.global_position - pos
+	enemy.rotation.y = -atan2(to_player.x, -to_player.z)
+	add_child(enemy)
+	enemy.sank.connect(_on_enemy_sank)
+
+	var captain := AiCaptain.new()
+	captain.ship = enemy
+	captain.target = player
+	add_child(captain)
+
+
+func _on_enemy_sank() -> void:
+	ships_sunk += 1
+	get_tree().create_timer(ENEMY_RESPAWN_DELAY).timeout.connect(_spawn_enemy)
+
+
+func _clear_of_islands(p: Vector3, margin: float) -> bool:
+	for isl in _islands:
+		if Vector2(p.x - isl.x, p.z - isl.y).length() < isl.z + margin:
+			return false
+	return true
 
 
 func _setup_input() -> void:
@@ -52,11 +114,22 @@ func _setup_input() -> void:
 	_bind("cam_right", [KEY_E])
 	_bind("toggle_fullscreen", [KEY_F11])
 	_bind("quit", [KEY_ESCAPE])
+	_bind("ammo_round", [KEY_1])
+	_bind("ammo_chain", [KEY_2])
+	_bind("ammo_grape", [KEY_3])
+	_bind("restart", [KEY_R])
+	if not InputMap.has_action("fire"):
+		InputMap.add_action("fire")
+		var click := InputEventMouseButton.new()
+		click.button_index = MOUSE_BUTTON_LEFT
+		InputMap.action_add_event("fire", click)
 
 
+## Adds key bindings, once. (Guarded so a scene reload doesn't stack duplicates.)
 func _bind(action: String, keys: Array) -> void:
-	if not InputMap.has_action(action):
-		InputMap.add_action(action)
+	if InputMap.has_action(action):
+		return
+	InputMap.add_action(action)
 	for k in keys:
 		var ev := InputEventKey.new()
 		ev.physical_keycode = k
@@ -111,6 +184,7 @@ func _spawn_islands() -> void:
 		while pos.length() < 150.0:
 			pos = Vector2(rng.randf_range(-900.0, 900.0), rng.randf_range(-900.0, 900.0))
 		var r := rng.randf_range(25.0, 80.0)
+		_islands.append(Vector3(pos.x, pos.y, r))
 
 		var body := StaticBody3D.new()
 		body.position = Vector3(pos.x, 0.0, pos.y)
