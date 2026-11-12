@@ -6,6 +6,8 @@ const ISLAND_SEED := 1715
 const ENEMY_RESPAWN_DELAY := 10.0
 
 var ocean: Ocean
+var environment: Environment
+var sun: DirectionalLight3D
 var player: Ship
 var hud: Hud
 var ships_sunk := 0
@@ -36,8 +38,11 @@ func _ready() -> void:
 	var rig := CameraRig.new()
 	rig.target = player
 	rig.yaw = -start_heading  # look the way the ship is sailing
+	rig.environment = environment
+	rig.sun = sun
 	add_child(rig)
 	ocean.follow_target = rig
+	controller.camera_rig = rig
 
 	_spawn_islands()
 
@@ -118,6 +123,7 @@ func _setup_input() -> void:
 	_bind("ammo_chain", [KEY_2])
 	_bind("ammo_grape", [KEY_3])
 	_bind("restart", [KEY_R])
+	_bind("cruise", [KEY_C])
 	if not InputMap.has_action("fire"):
 		InputMap.add_action("fire")
 		var click := InputEventMouseButton.new()
@@ -146,6 +152,7 @@ func _setup_environment() -> void:
 	sky.sky_material = sky_mat
 
 	var env := Environment.new()
+	environment = env
 	env.background_mode = Environment.BG_SKY
 	env.sky = sky
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
@@ -156,14 +163,14 @@ func _setup_environment() -> void:
 	env.ssao_enabled = true
 	env.fog_enabled = true
 	env.fog_light_color = Color(0.68, 0.8, 0.9)
-	env.fog_density = 0.0012
+	env.fog_density = 0.00065  # CameraRig drives this per view
 	env.fog_sky_affect = 0.3
 
 	var world_env := WorldEnvironment.new()
 	world_env.environment = env
 	add_child(world_env)
 
-	var sun := DirectionalLight3D.new()
+	sun = DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-40.0, -35.0, 0.0)
 	sun.light_energy = 1.2
 	sun.shadow_enabled = true

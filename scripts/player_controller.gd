@@ -5,6 +5,7 @@ class_name PlayerController
 ## side of the ship the mouse cursor is. Draws the firing arcs for that side.
 
 var ship: Ship
+var camera_rig: CameraRig
 var ammo: int = Ship.Ammo.ROUND
 var aim_side := 1  ## +1 starboard, -1 port: the side facing the cursor
 
@@ -41,7 +42,10 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event.is_action_pressed("ammo_grape"):
 		ammo = Ship.Ammo.GRAPE
 	elif event.is_action_pressed("fire"):
-		ship.fire(aim_side, ammo)
+		if camera_rig and camera_rig.cruising:
+			camera_rig.set_cruise(false)  # first click returns to the map view
+		else:
+			ship.fire(aim_side, ammo)
 
 
 func _physics_process(_delta: float) -> void:
@@ -88,7 +92,11 @@ func _update_aim_side() -> void:
 ## Bright when that side is loaded, dim red while reloading.
 func _draw_arcs() -> void:
 	var loaded := ship.can_fire(aim_side)
+	var fade := 1.0 - camera_rig.cruise_blend if camera_rig else 1.0
+	if fade <= 0.01:
+		return  # hidden in cruise view
 	var col := Color(1.0, 0.95, 0.75, 0.55) if loaded else Color(1.0, 0.45, 0.35, 0.22)
+	col.a *= fade
 	var step := 0.05
 	var starts: Array[Vector3] = []
 	var ends: Array[Vector3] = []
