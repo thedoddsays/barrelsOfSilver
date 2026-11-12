@@ -53,27 +53,79 @@ void vertex() {
 	v_jacobian = tangent.x * binormal.z - tangent.z * binormal.x;
 }
 
-// Small-scale ripples as a sum of smooth directional sine waves. (The previous grid-based
-// value noise produced blocky, pixelated-looking highlights.) Returns the slope (d/dx, d/dz).
-vec2 ripple_slope(vec2 p, float t) {
-	vec2 slope = vec2(0.0);
-	// direction (normalised in loop), frequency, speed, amplitude
-	vec4 r[6] = vec4[6](
-		vec4(0.83, 0.56, 0.9, 1.3),
-		vec4(-0.42, 0.91, 1.3, 1.6),
-		vec4(0.97, -0.24, 1.9, 2.1),
-		vec4(-0.71, -0.70, 2.7, 2.4),
-		vec4(0.12, 0.99, 3.8, 2.9),
-		vec4(0.60, -0.80, 5.1, 3.3)
+// --- Gradient noise ---------------------------------------------------------------
+// History: value noise looked blocky/pixelated; a sum of fixed sines looked like a tiled
+// image (periodic interference). Gradient noise is smooth AND aperiodic; each octave is
+// rotated, scaled by a non-integer factor and drifts its own way, so nothing lines up.
+
+// Integer hash (stable at large world coordinates, unlike the classic sin() hash).
+vec2 hash2(vec2 p) {
+	uvec2 q = uvec2(ivec2(p) + ivec2(32768)) * uvec2(1597334673u, 3812015801u);
+	uint n = (q.x ^ q.y) * 1597334673u;
+	uvec2 r = uvec2(n, n * 48271u);
+	return vec2(r) * (2.0 / 4294967295.0) - 1.0;
+}
+
+// Gradient noise with analytic derivatives: returns (value, d/dx, d/dy).
+vec3 noised(vec2 p) {
+	vec2 i = floor(p);
+	vec2 f = fract(p);
+	vec2 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+	vec2 du = 30.0 * f * f * (f * (f - 2.0) + 1.0);
+	vec2 ga = hash2(i);
+	vec2 gb = hash2(i + vec2(1.0, 0.0));
+	vec2 gc = hash2(i + vec2(0.0, 1.0));
+	vec2 gd = hash2(i + vec2(1.0, 1.0));
+	float va = dot(ga, f);
+	float vb = dot(gb, f - vec2(1.0, 0.0));
+	float vc = dot(gc, f - vec2(0.0, 1.0));
+	float vd = dot(gd, f - vec2(1.0, 1.0));
+	float k = va - vb - vc + vd;
+	float value = va + u.x * (vb - va) + u.y * (vc - va) + u.x * u.y * k;
+	vec2 deriv = ga + u.x * (gb - ga) + u.y * (gc - ga) + u.x * u.y * (ga - gb - gc + gd)
+		+ du * (u.yx * k + vec2(vb, vc) - va);
+	return vec3(value, deriv);
+}
+
+mat2 rot(float a) {
+	float c = cos(a);
+	float s = sin(a);
+	return mat2(vec2(c, s), vec2(-s, c));
+}
+
+// Small-scale ripples: 5 octaves of noise, each with its own size (metres), angle, drift
+// and distance fade. Returns the surface slope (d/dx, d/dz).
+vec2 ripple_slope(vec2 p, float t, float dist) {
+	// size in metres, slope weight, rotation (rad), drift speed (m/s)
+	vec4 o[5] = vec4[5](
+		vec4(9.0, 0.085, 0.0, 0.9),
+		vec4(4.7, 0.07, 1.7, 0.7),
+		vec4(2.45, 0.058, 3.9, 0.55),
+		vec4(1.3, 0.047, 5.3, 0.45),
+		vec4(0.68, 0.036, 2.6, 0.35)
 	);
-	for (int i = 0; i < 6; i++) {
-		vec2 d = normalize(r[i].xy);
-		float freq = r[i].z;
-		float phase = dot(d, p) * freq - t * r[i].w;
-		float amp = 0.05 / freq;
-		slope += d * cos(phase) * freq * amp;
+	vec2 slope = vec2(0.0);
+	for (int i = 0; i < 5; i++) {
+		float size = o[i].x;
+		float fade = 1.0 - smoothstep(size * 60.0, size * 200.0, dist);
+		if (fade <= 0.0) {
+			continue;
+		}
+		mat2 r = rot(o[i].z);
+		vec2 drift = r * vec2(1.0, 0.0) * o[i].w * t;
+		vec3 n = noised((r * p + drift) / size);
+		// Chain rule back to world space: d/dp = (1/size) * R^T * grad.
+		slope += (n.yz * r) * (o[i].y * fade);
 	}
 	return slope;
+}
+
+// Large, slow patches where the wind ruffles the water more or less ("cat's paws").
+// This macro variation is what stops the sea reading as one repeated texture.
+float wind_patches(vec2 p, float t) {
+	float a = noised(rot(0.6) * p / 140.0 + vec2(t * 0.012, t * 0.004)).x;
+	float b = noised(rot(2.2) * p / 55.0 - vec2(t * 0.02, -t * 0.01)).x;
+	return clamp(0.5 + a * 0.9 + b * 0.5, 0.0, 1.0);
 }
 
 void fragment() {
@@ -82,22 +134,28 @@ void fragment() {
 	// Fade fine detail with distance so it doesn't shimmer/alias far away.
 	float detail = 1.0 - smoothstep(40.0, 350.0, dist);
 
-	vec2 s = ripple_slope(p, wave_time) * ripple_strength * detail;
+	float patches = wind_patches(p, wave_time);
+	float ruffle = mix(0.45, 1.3, patches);
+	vec2 s = ripple_slope(p, wave_time, dist) * ripple_strength * ruffle;
 	vec3 n = normalize(v_normal + vec3(-s.x, 0.0, -s.y));
 	NORMAL = normalize((VIEW_MATRIX * vec4(n, 0.0)).xyz);
 
 	float crest = clamp(v_height * 0.25 + 0.5, 0.0, 1.0);
 	vec3 water = mix(deep_color, scatter_color, pow(crest, 2.5));
+	// Calm patches read a touch darker and glassier, ruffled ones a touch lighter.
+	water *= mix(0.9, 1.08, patches);
 
 	float foam = 1.0 - smoothstep(0.5, 0.72, v_jacobian);
-	float breakup = 0.5 + 0.25 * sin(p.x * 0.9 + wave_time * 0.7) * sin(p.y * 0.7 - wave_time * 0.5)
-		+ 0.25 * sin((p.x + p.y) * 0.35 + wave_time * 0.3);
+	// Break the crest foam into streaks with noise (was a sin(x)*sin(z) grid).
+	float breakup = 0.5 + 0.7 * noised(rot(0.9) * p / 2.8 + vec2(wave_time * 0.25, 0.0)).x
+		+ 0.45 * noised(rot(2.4) * p / 1.1 - vec2(0.0, wave_time * 0.3)).x;
 	foam *= smoothstep(0.3, 0.7, breakup);
 	foam = clamp(foam * foam_amount, 0.0, 1.0);
 
 	ALBEDO = mix(water, foam_color, foam);
-	// Slightly rougher with distance: kills sparkly specular aliasing.
-	ROUGHNESS = mix(mix(0.1, 0.22, 1.0 - detail), 0.7, foam);
+	// Slightly rougher with distance (kills sparkly specular aliasing) and in ruffled patches.
+	float rough = mix(0.08, 0.16, patches);
+	ROUGHNESS = mix(mix(rough, 0.24, 1.0 - detail), 0.7, foam);
 	SPECULAR = 0.5;
 	METALLIC = 0.0;
 }

@@ -17,14 +17,25 @@ Flag-style ship combat and looks), so systems built here should carry forward.
 - Owner tests on Windows 11 (and Mint). Ask them to paste errors from Godot's Output /
   Debugger panels.
 
+## Art direction (owner decision, 2026-11-12)
+- **Slightly stylized realism**: realistic lighting, materials and water motion, with simplified
+  shapes, a cohesive palette and readable silhouettes. Think between Sea of Thieves and Black Flag;
+  keep the warm, adventurous feel. Consistency beats raw fidelity.
+- **High top-down "2.5D" camera** stays: a 3D world read from above at a fixed-feeling angle,
+  where the map reads like a map and ships read like miniatures.
+- Priority order for visual work: water, then lighting/post, then ship models and sails, then
+  VFX, then islands.
+
 ## Current state (milestone 2 in progress: broadside combat vs. one AI ship)
 - The world is **built in code at runtime** (`scripts/main.gd`), so the editor viewport of
   `main.tscn` is empty. Press F5 to see it. A planned improvement is making it visible/editable
   in the editor (`@tool` or real scenes).
 - `ocean.gd` + `shaders/ocean.gdshader`: 4 Gerstner waves; CPU `get_height()` mirrors the
   shader so buoyancy matches visuals. The mesh follows the camera, snapped to the vertex grid.
-  Ripples are directional sines (the earlier value noise looked blocky/pixelated) and fade
-  with distance.
+  Ripples are 5 octaves of gradient noise with analytic derivatives (rotated, drifting, each
+  fading by distance) modulated by large slow "wind patches". History: value noise looked
+  blocky/pixelated; summed sines looked like a tiled image (owner, 2026-11-12). Avoid both.
+  Integer hash, not sin() hash, so it stays stable at large world coordinates.
 - `ship.gd`: RigidBody3D, 8 buoyancy probes, anisotropic hull drag (keel), wind thrust by
   point of sail (in irons < 40°, best on a broad reach), rudder bite scales with speed, heel
   torque, braced yards, furl/unfurl sails (W/S: furled / battle / full), wake particles.
@@ -32,7 +43,13 @@ Flag-style ship combat and looks), so systems built here should carry forward.
   realistically. Ship visuals are placeholder primitives.
 - `wind.gd` (autoload `Wind`): `angle` = bearing the wind blows TOWARD; drifts and gusts.
   Compass: bearing 0 = north = -Z, PI/2 = east = +X. Ship heading bearing = `-rotation.y`.
-- `camera_rig.gd`: follow cam; zooming in lowers the pitch (-32°…-68°); Q/E or right-drag rotates.
+- `camera_rig.gd`: two blended views. **Map view**: narrow 28° lens (flat 2.5D look), 40–400 m,
+  zooming in lowers the pitch (-32°…-68°); Q/E or right-drag rotates. **Cruise view** (C, inspired by
+  Black Flag's "just sail" mode): low chase cam behind the ship following its heading, HUD and firing
+  arcs fade out, fog thickens to hide the ocean mesh edge (~600 m). Wheel, right-drag, Q/E, click or C
+  returns to map view (a click there doesn't fire). Rig drives fog density and sun shadow distance.
+  `cruise_changed` signal is the hook for crew-shanty music: needs original/licensed recordings.
+  Owner loved both views on first try (2026-11-12): treat the current camera values as the baseline.
 - `hud.gd`: compass (wind and heading arrows), speed, sails, point of sail, controls.
 - `main.gd`: input map in code, sky/fog/ACES/glow/SSAO, sun, 14 seeded islands with palms.
 
