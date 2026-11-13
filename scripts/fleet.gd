@@ -8,10 +8,12 @@ class_name Fleet
 ## - Fleet pace (soft cap): while the fleet sails together, the flagship is held to what the
 ##   slowest escort can make on the current heading, with a 20% margin so stragglers can
 ##   close up. "Break away" lifts the cap; escorts follow as best they can.
-## - Engage on command: escorts ignore every other ship until the flagship engages, i.e.
-##   the player opens fire or the fleet comes under fire (owner, 2026-11-13). Then they fight
-##   enemies near the flagship, and the battle ends after COMBAT_TIMEOUT quiet seconds with
-##   no enemy close; escorts rejoin and fleet pace comes back on.
+## - Fight aggressors only (owner, 2026-11-13): escorts ignore every other ship. An
+##   aggressor is a ship that hit or rammed any ship of the fleet, or one the PLAYER hit,
+##   rammed or fired a broadside at (it was in the line of fire). Escorts' own stray shots
+##   don't make aggressors, so passing or fleeing ships are left alone. The battle ends when
+##   no aggressor is left afloat, or after COMBAT_TIMEOUT quiet seconds with none near the
+##   flagship; then the list clears, escorts rejoin and fleet pace comes back on.
 
 signal changed
 
@@ -39,7 +41,8 @@ const FORMATION_TURN_RATE := 0.35
 var flagship: Ship
 var escorts: Array[Ship] = []
 var keep_together := true  ## false = "break away": the flagship ignores fleet pace
-var engaged := false  ## the flagship has engaged: escorts may fight
+var engaged := false  ## in battle: there are aggressors, and escorts may fight them
+var aggressors: Array[Ship] = []
 var _quiet := 0.0  ## seconds since the fleet last fired or was hit
 var pace := 1.0  ## current fleet-pace speed fraction on the flagship (1 = not limited)
 
@@ -73,7 +76,7 @@ func add_escort(s: Ship) -> bool:
 	s.get_parent().add_child(captain)
 	s.sank.connect(_on_escort_sank.bind(s))
 	s.fired.connect(_on_fleet_fired)  # escorts firing keeps a battle going
-	s.hull_damaged.connect(_on_fleet_hit)
+	s.attacked.connect(_on_fleet_attacked)
 	changed.emit()
 	return true
 
@@ -103,44 +106,73 @@ func station_position(s: Ship) -> Vector3:
 	return p
 
 
-## True if any hostile ship is within `range_m` of the flagship. Battle is judged where the
+func is_aggressor(s: Ship) -> bool:
+	return aggressors.has(s)
+
+
+## True if any aggressor is within `range_m` of the flagship. Battle is judged where the
 ## player is: sail away from a fight and fleet pace comes back on, so escorts can rejoin.
-func enemies_near(range_m: float) -> bool:
-	for node in get_tree().get_nodes_in_group("ships"):
-		var e := node as Ship
-		if e.is_sunk or not flagship.is_hostile_to(e):
-			continue
+func aggressors_near(range_m: float) -> bool:
+	for e in aggressors:
 		if flagship.global_position.distance_to(e.global_position) < range_m:
 			return true
 	return false
 
 
-## Call once the flagship is set: the player firing, or the flagship being hit, engages.
+## Call once the flagship is set.
 func watch_flagship() -> void:
 	flagship.fired.connect(_on_flagship_fired)
-	flagship.hull_damaged.connect(_on_fleet_hit)
+	flagship.attacked.connect(_on_fleet_attacked)
+	flagship.landed_hit.connect(_on_flagship_hit_ship)
 
 
-func _on_flagship_fired(_side: int) -> void:
-	_engage("flagship opened fire")
-
-
-func _on_fleet_fired(_side: int) -> void:
+## A broadside marks every outside ship in its line of fire (roughly abeam on that side and
+## within range), so firing at a ship and missing still counts as attacking it.
+func _on_flagship_fired(side: int, ammo: int) -> void:
+	var out := flagship.side_dir(side)
+	var reach := Ship.ammo_range(ammo) * 1.15
+	for node in get_tree().get_nodes_in_group("ships"):
+		var s := node as Ship
+		if s.is_sunk or is_member(s):
+			continue
+		var off := s.global_position - flagship.global_position
+		off.y = 0.0
+		var d := off.length()
+		if d < 0.01 or d > reach + s.length() * 0.5:
+			continue
+		# Allow for the target's length: a long ship near the edge of the arc still counts.
+		var half_arc := deg_to_rad(28.0) + atan2(s.length() * 0.5, d)
+		if out.angle_to(off) < half_arc:
+			_add_aggressor(s, "flagship fired on %s" % s.spec.display_name)
 	if engaged:
 		_quiet = 0.0
 
 
-func _on_fleet_hit(source: String, _amount: float) -> void:
-	if source == "cannon" or source == "rammed":
-		_engage("fleet under fire")
+func _on_flagship_hit_ship(victim: Ship) -> void:
+	if not is_member(victim):
+		_add_aggressor(victim, "flagship hit %s" % victim.spec.display_name)
 
 
-func _engage(reason: String) -> void:
+func _on_fleet_attacked(by: Ship) -> void:
+	if is_instance_valid(by) and not is_member(by):
+		_add_aggressor(by, "fleet attacked by %s" % by.spec.display_name)
+
+
+func _on_fleet_fired(_side: int, _ammo: int) -> void:
+	if engaged:
+		_quiet = 0.0
+
+
+func _add_aggressor(s: Ship, reason: String) -> void:
 	_quiet = 0.0
+	if aggressors.has(s):
+		return
+	aggressors.append(s)
+	print("[fleet] aggressor: %s" % reason)
 	if not engaged:
 		engaged = true
-		print("[fleet] battle: %s" % reason)
-		changed.emit()
+		print("[fleet] battle")
+	changed.emit()
 
 
 func _physics_process(delta: float) -> void:
@@ -153,8 +185,9 @@ func _physics_process(delta: float) -> void:
 	pace = 1.0
 	if engaged:
 		_quiet += delta
-		if _quiet > COMBAT_TIMEOUT and not enemies_near(ENGAGE_RANGE):
+		if aggressors.is_empty() or (_quiet > COMBAT_TIMEOUT and not aggressors_near(ENGAGE_RANGE)):
 			engaged = false
+			aggressors.clear()
 			print("[fleet] battle over: rejoining formation")
 			changed.emit()
 	if keep_together and not escorts.is_empty() and not engaged:
@@ -177,6 +210,7 @@ func _physics_process(delta: float) -> void:
 
 
 func _prune() -> void:
+	aggressors = aggressors.filter(func(e): return is_instance_valid(e) and not e.is_sunk)
 	var before := escorts.size()
 	escorts = escorts.filter(func(e): return is_instance_valid(e) and not e.is_sunk)
 	if escorts.size() != before:

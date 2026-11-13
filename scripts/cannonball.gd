@@ -65,7 +65,7 @@ func _physics_process(delta: float) -> void:
 		if s == shooter or s.is_sunk or s.faction == shooter_faction:
 			continue
 		if s.contains_point(mid) or s.contains_point(to):
-			s.take_hit(ammo, to, velocity)
+			s.take_hit(ammo, to, velocity, shooter if is_instance_valid(shooter) else null)
 			_die()
 			return
 

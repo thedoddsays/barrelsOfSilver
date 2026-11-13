@@ -18,8 +18,12 @@ signal sank
 signal impact(kind: String, closing_speed: float, damage: float)
 ## Every point of hull damage, tagged: "cannon", "rammed", "ramming" or "grounded".
 signal hull_damaged(source: String, amount: float)
-## A broadside was ordered (the fleet uses this to know the flagship has engaged).
-signal fired(side: int)
+## A broadside was ordered (the fleet uses this to mark ships in the line of fire).
+signal fired(side: int, ammo: int)
+## Another ship hit us with a cannonball or rammed us. `by` may be null.
+signal attacked(by: Ship)
+## We hit another ship with a cannonball or rammed it.
+signal landed_hit(victim: Ship)
 
 const SAIL_STEPS := [0.0, 0.5, 1.0]
 const SAIL_NAMES := ["Furled", "Battle sails", "Full sail"]
@@ -299,7 +303,7 @@ func fire(side: int, ammo: int) -> bool:
 	var t := reload_time / crew_factor()
 	_reload[side] = t
 	_reload_total[side] = t
-	fired.emit(side)
+	fired.emit(side, ammo)
 	return true
 
 
@@ -404,9 +408,10 @@ func contains_point(p: Vector3) -> bool:
 		and l.z > -0.625 * _len and l.z < 0.4375 * _len)
 
 
-func take_hit(ammo: int, at: Vector3, ball_velocity: Vector3) -> void:
+func take_hit(ammo: int, at: Vector3, ball_velocity: Vector3, by: Ship = null) -> void:
 	if is_sunk:
 		return
+	_note_attack(by)
 	var a: Dictionary = AMMO[ammo]
 	var r := randf_range(0.6, 1.4)
 	sails = maxf(sails - float(a["sails"]) * r, 0.0)
@@ -424,6 +429,13 @@ func point_velocity(p: Vector3) -> Vector3:
 ## Same, but from just before the latest physics steps: the velocity going into a collision.
 func pre_impact_velocity(p: Vector3) -> Vector3:
 	return _vel_hist[0] + _ang_hist[0].cross(p - global_position)
+
+
+## Tell both sides who started it (the fleet uses this to pick its fights).
+func _note_attack(by: Ship) -> void:
+	attacked.emit(by)
+	if is_instance_valid(by):
+		by.landed_hit.emit(self)
 
 
 func _damage_hull(amount: float, source: String) -> void:
@@ -489,6 +501,10 @@ func _resolve_ram(other: Ship, at: Vector3) -> void:
 	var severity := closing - BUMP_SPEED
 	_take_ram(severity, 1.0 - share_a, other.mass, vb - va, closing)
 	other._take_ram(severity, share_a, mass, va - vb, closing)
+	if share_a >= 0.5:
+		other._note_attack(self)
+	else:
+		_note_attack(other)
 	_contact_cooldown[other.get_instance_id()] = CONTACT_COOLDOWN
 	other._contact_cooldown[get_instance_id()] = CONTACT_COOLDOWN
 	_impact_fx.call_deferred(at, false)

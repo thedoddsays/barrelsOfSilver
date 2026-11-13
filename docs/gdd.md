@@ -179,6 +179,7 @@ publishing anything.
 | Collision damage | Measuring impact speed from the ships' velocity when the contact is reported | Godot reports contacts *after* resolving the crash, so speeds were already cancelled: rams read half speed, islands read zero, and who-rammed-whom came out wrong | Measure from each ship's velocity a couple of physics ticks earlier | 2026-11-13 |
 | Fleet formation | Wide stations (rear escort ~90 m astern), flagship capped to 90% of the slowest escort, max zoom 400 m | Owner playtest: slower escorts dropped out of the camera view, and the camera couldn't zoom out far enough | Tighter stations (rear ~65 m), 80% pace, the fleet waits for anyone >20 m behind station, pace counts tacking upwind, zoom out to 650 m | 2026-11-13 |
 | Fleet collisions | Distance-only friend avoidance | Escorts fought their own stations (stations sat inside the avoid radius), and the heavy frigate rammed friends mid-battle | Look-ahead (predicted closest approach over 6 s), tighter clearance in formation, separate combat lanes per escort | 2026-11-13 |
+| Fleet targeting | Once a battle started, escorts fought any non-fleet ship within 250 m of the flagship | Owner: a passing trader or a ship trying to flee shouldn't be attacked just for being near a fight | Escorts fight only aggressors: ships that attacked the fleet or that the player attacked | 2026-11-13 |
 | Collision damage | Deciding who rammed whom from the contact surface's direction | Owner playtest: the rammer took more damage than the target. On angled hits Godot often reports the rammer's own bow or side face, so the target's speed looked like it was driving into the rammer | Judge each ship by its speed toward the point of contact; rammer now takes about 1/5 of what the target takes in live fights too | 2026-11-13 |
 
 ---
@@ -268,12 +269,13 @@ the other ships fight on their own under AI; the flagship can be switched outsid
 - **Fleet cap: 4 ships including the flagship** (owner, 2026-11-13; can be revisited).
 - **Formation: loose.** Escorts keep loose stations around and behind the flagship, spaced by
   size, never ram a friend, and steer around islands.
-- **Engage on command (owner, 2026-11-13).** The fleet ignores every other ship until the
-  flagship engages, so escorts don't go after every ship they come across. Working rule:
-  "engaged" starts when the player opens fire or any fleet ship is hit by an enemy, and
-  ends after 20 quiet seconds with no enemy within 250 m of the flagship. While engaged,
-  escorts fight enemies near the flagship and never stray more than 300 m from it.
-  Confirmed by the owner: being fired upon counts as engaging.
+- **Escorts fight aggressors only (owner, 2026-11-13).** No formation or combat orders:
+  escorts leave every ship alone unless it is an aggressor, so they never chase ships
+  passing by or trying to flee. An aggressor is a ship that fired on or rammed any ship
+  of the fleet, or one the player hit, rammed or fired a broadside at. Escorts' own stray
+  shots don't count. The battle ends when no aggressor is afloat, or after 20 quiet
+  seconds with none within 250 m of the flagship. Escorts never stray more than 300 m
+  from the flagship. Later, attacking a neutral should cost reputation with its nation.
 - **Merchant prizes join the fleet only if the player chooses.** Once in the fleet they are
   treated like any other ship in battle (no special hang-back behaviour).
 

@@ -156,8 +156,10 @@ func _pick_target() -> void:
 		if _recalled:
 			return
 		if not fleet.engaged:
-			target = null  # engage on command: ignore everyone until the flagship engages
+			target = null  # no fight on: ignore everyone
 			return
+		if _has_target() and not fleet.is_aggressor(target):
+			target = null
 	var best: Ship = null
 	var best_d := INF
 	for node in ship.get_tree().get_nodes_in_group("ships"):
@@ -166,8 +168,9 @@ func _pick_target() -> void:
 			continue
 		var d := e.global_position.distance_to(ship.global_position)
 		if fleet != null:
-			# Escorts fight what's near the flagship.
-			if e.global_position.distance_to(anchor.global_position) > engage_range:
+			# Escorts fight only aggressors, and only near the flagship.
+			if not fleet.is_aggressor(e) or \
+					e.global_position.distance_to(anchor.global_position) > engage_range:
 				continue
 		elif d > engage_range:
 			continue

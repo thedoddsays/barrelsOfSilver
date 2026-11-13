@@ -125,10 +125,14 @@ Flag-style ship combat and looks), so systems built here should carry forward.
   trims speed with `Ship.thrust_limit`, and brakes/steers around friends (look-ahead: predicted closest
   approach over 6 s, so heavy ships turn away early; tighter clearance in formation so stations don't
   fight the avoidance). In battle, escorts circle a shared target in separate range lanes.
-  **Engage on command (owner, 2026-11-13):** escorts ignore every ship until `Fleet.engaged`, which starts
-  when the player fires (`Ship.fired`) or a fleet ship takes cannon/ram damage, and ends after 20 quiet
-  seconds with no enemy within 250 m of the flagship. While engaged they fight enemies within 250 m of the
-  flagship, leashed to 300 m from it (with hysteresis). Escort status shows on the HUD and prints
+  **Aggressors only (owner, 2026-11-13; no formation orders wanted):** escorts fight only ships on
+  `Fleet.aggressors`: ships that hit or rammed any fleet ship (`Ship.attacked`), or that the PLAYER hit,
+  rammed (`Ship.landed_hit`) or fired a broadside at (in the line of fire: ~28° of abeam plus the target's
+  half-length, within 1.15 × ammo range). Escorts' own stray hits don't add aggressors, so passing or fleeing
+  ships are left alone. `Fleet.engaged` = there are aggressors; the battle ends when none is afloat or after
+  20 quiet seconds with none within 250 m of the flagship, and the list clears. Escorts only take aggressors
+  within 250 m of the flagship, leashed to 300 m from it (with hysteresis). The list is the hook for
+  reputation later (attacking a neutral). Escort status shows on the HUD and prints
   `[fleet] ...` lines to the Output panel. Enemies auto-target the nearest fleet ship. Fleet pace (off while
   engaged): flagship thrust capped to 80% of the slowest escort's
   progress on its heading (`potential_progress`, which counts tacking for rigs that can't point as high),
