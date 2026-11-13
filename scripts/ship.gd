@@ -9,6 +9,11 @@ class_name Ship
 ## Sides: +1 = starboard (right, local +X), -1 = port (left).
 
 signal sank
+## A collision that did damage. kind: "rammed" (we were hit), "ramming" (we hit them),
+## "grounded" (an island). For sound, camera shake and HUD messages.
+signal impact(kind: String, closing_speed: float, damage: float)
+## Every point of hull damage, tagged: "cannon", "rammed", "ramming" or "grounded".
+signal hull_damaged(source: String, amount: float)
 
 const SAIL_STEPS := [0.0, 0.5, 1.0]
 const SAIL_NAMES := ["Furled", "Battle sails", "Full sail"]
@@ -28,6 +33,15 @@ const AMMO := [
 	{"name": "Grape shot", "speed": 44.0, "elevation": 8.0, "balls": 6, "spread": 7.0,
 		"radius": 0.1, "hull": 0.15, "sails": 0.4, "crew": 1.0},
 ]
+## Collisions. Closing speeds (m/s, along the contact normal) below BUMP_SPEED are harmless
+## nudges. Above it, each m/s does this much hull damage:
+const BUMP_SPEED := 1.5
+const RAM_DAMAGE_TAKEN := 4.0  ## to the ship that gets rammed (a square hit on its side)
+const RAM_DAMAGE_RAMMER := 0.8  ## to the ship doing the ramming: a stout bow takes far less
+const RAM_CREW_LOSS := 0.4  ## crew thrown about / crushed on the rammed ship, per m/s
+const GROUND_DAMAGE := 1.5  ## to a ship striking an island
+const CONTACT_COOLDOWN := 1.0  ## one damage event per collision, not one per physics tick
+
 const GUN_Z := [-4.0, -1.5, 1.0, 3.5]
 const GUN_X := 2.6
 const GUN_Y := 0.25
@@ -81,6 +95,11 @@ var _reload_total := {-1: 1.0, 1: 1.0}
 var _pending_shots: Array[Dictionary] = []  ## guns in a broadside fire in a ripple
 var _sink_time := 0.0
 var _v_fwd := 0.0
+var _contact_cooldown := {}  ## collider instance id -> seconds until it can damage us again
+## Velocity history. Contacts are reported after the physics engine has already resolved
+## the crash, so impact speed is measured from where we were going a couple of ticks ago.
+var _vel_hist: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
+var _ang_hist: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
 
 var _probes: Array[Vector3] = []
 var _yards: Array[Node3D] = []
@@ -97,6 +116,8 @@ func _ready() -> void:
 	center_of_mass = Vector3(0.0, -0.9, 0.0)  # low ballast keeps her upright
 	collision_layer = LAYER_SHIPS
 	collision_mask = LAYER_WORLD | LAYER_SHIPS
+	contact_monitor = true  # needed for ramming / grounding damage
+	max_contacts_reported = 8
 	add_to_group("ships")
 	hull = max_hull
 	crew = max_crew
@@ -216,13 +237,134 @@ func take_hit(ammo: int, at: Vector3, ball_velocity: Vector3) -> void:
 		return
 	var a: Dictionary = AMMO[ammo]
 	var r := randf_range(0.6, 1.4)
-	hull = maxf(hull - float(a["hull"]) * r, 0.0)
 	sails = maxf(sails - float(a["sails"]) * r, 0.0)
 	crew = maxf(crew - float(a["crew"]) * randf_range(0.5, 1.5), 0.0)
 	apply_impulse(ball_velocity.normalized() * 1500.0, at - global_position)
 	Fx.splinters(get_parent(), at)
+	_damage_hull(float(a["hull"]) * r, "cannon")
+
+
+## Velocity of the hull at a world-space point (includes spin).
+func point_velocity(p: Vector3) -> Vector3:
+	return linear_velocity + angular_velocity.cross(p - global_position)
+
+
+## Same, but from just before the latest physics steps: the velocity going into a collision.
+func pre_impact_velocity(p: Vector3) -> Vector3:
+	return _vel_hist[0] + _ang_hist[0].cross(p - global_position)
+
+
+func _damage_hull(amount: float, source: String) -> void:
+	if is_sunk:
+		return
+	hull = maxf(hull - amount, 0.0)
+	hull_damaged.emit(source, amount)
 	if hull <= 0.0:
 		_sink()
+
+
+# ---------------------------------------------------------------------------
+# Collisions: ramming and running into islands
+# ---------------------------------------------------------------------------
+
+func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
+	if is_sunk:
+		return
+	for i in state.get_contact_count():
+		var other := state.get_contact_collider_object(i)
+		if other == null:
+			continue
+		var id := other.get_instance_id()
+		if _contact_cooldown.has(id):
+			continue
+		var at := state.get_contact_local_position(i)  # world space in Godot 4
+		# Note: the contact normal is deliberately NOT used. On an angled box-on-box hit it
+		# is often the rammer's own bow/side face, which made the rammer look rammed.
+		if other is Ship:
+			# One ship resolves the collision for both, so it's counted exactly once.
+			if get_instance_id() < id and not (other as Ship).is_sunk:
+				_resolve_ram(other as Ship, at)
+		else:
+			_resolve_grounding(id, at)
+
+
+static func _flat_dir(v: Vector3) -> Vector3:
+	v.y = 0.0
+	return v.normalized() if v.length_squared() > 0.0001 else Vector3.ZERO
+
+
+func _resolve_ram(other: Ship, at: Vector3) -> void:
+	var va := pre_impact_velocity(at)
+	var vb := other.pre_impact_velocity(at)
+	va.y = 0.0
+	vb.y = 0.0
+	# Who drove into whom: each ship's speed toward the point of contact. A rammer's bow
+	# is at the contact and it is sailing straight at it; a ship hit amidships is moving
+	# past the contact point, not into it.
+	var ua := _flat_dir(at - global_position)
+	var ub := _flat_dir(at - other.global_position)
+	var drive_a := maxf(va.dot(ua), 0.0)
+	var drive_b := maxf(vb.dot(ub), 0.0)
+	if drive_a + drive_b < 0.001:
+		return
+	var share_a := drive_a / (drive_a + drive_b)  # 1 = we did all the ramming
+	# Closing speed along the main rammer's line of approach (so an overtaking ram only
+	# counts the speed difference, and a sideswipe barely counts at all).
+	var line := ua if drive_a >= drive_b else -ub
+	var closing := (va - vb).dot(line)
+	if closing < BUMP_SPEED:
+		return
+	var severity := closing - BUMP_SPEED
+	_take_ram(severity, 1.0 - share_a, other.mass, vb - va, closing)
+	other._take_ram(severity, share_a, mass, va - vb, closing)
+	_contact_cooldown[other.get_instance_id()] = CONTACT_COOLDOWN
+	other._contact_cooldown[get_instance_id()] = CONTACT_COOLDOWN
+	_impact_fx.call_deferred(at, false)
+
+
+## `rammed_share`: how much of the blow the other ship delivered (1 = we were rammed,
+## 0 = we did the ramming). `incoming`: the other ship's velocity relative to ours.
+func _take_ram(severity: float, rammed_share: float, other_mass: float, incoming: Vector3,
+		closing: float) -> void:
+	# A blow square on our side hurts more than one along our length (bow or stern).
+	var broadside := 0.5 + 0.5 * absf(_flat_dir(incoming).dot(side_dir(1)))
+	var heft := sqrt(other_mass / mass)  # a heavier ship hits harder
+	var dmg := severity * heft * (RAM_DAMAGE_TAKEN * rammed_share * broadside
+		+ RAM_DAMAGE_RAMMER * (1.0 - rammed_share))
+	crew = maxf(crew - severity * heft * RAM_CREW_LOSS * rammed_share * randf_range(0.6, 1.4), 0.0)
+	var kind := "rammed" if rammed_share >= 0.5 else "ramming"
+	_damage_hull(dmg, kind)
+	impact.emit(kind, closing, dmg)
+
+
+func _resolve_grounding(id: int, at: Vector3) -> void:
+	# Speed toward the point of contact: driving bow-first onto rocks counts in full,
+	# scraping along the shore barely counts.
+	var closing := pre_impact_velocity(at).dot(_flat_dir(at - global_position))
+	if closing < BUMP_SPEED:
+		return
+	var dmg := (closing - BUMP_SPEED) * GROUND_DAMAGE
+	_damage_hull(dmg, "grounded")
+	impact.emit("grounded", closing, dmg)
+	_contact_cooldown[id] = CONTACT_COOLDOWN
+	_impact_fx.call_deferred(at, true)
+
+
+func _impact_fx(at: Vector3, grounding: bool) -> void:
+	Fx.splinters(get_parent(), at)
+	if grounding:
+		Fx.dust(get_parent(), at)
+
+
+func _tick_contacts(delta: float) -> void:
+	_vel_hist.push_back(linear_velocity)
+	_vel_hist.pop_front()
+	_ang_hist.push_back(angular_velocity)
+	_ang_hist.pop_front()
+	for id in _contact_cooldown.keys():
+		_contact_cooldown[id] = float(_contact_cooldown[id]) - delta
+		if _contact_cooldown[id] <= 0.0:
+			_contact_cooldown.erase(id)
 
 
 func _sink() -> void:
@@ -242,6 +384,7 @@ func _physics_process(delta: float) -> void:
 		return
 	var t := ocean.wave_time()
 	_tick_guns(delta)
+	_tick_contacts(delta)
 
 	# A holed hull sits lower; a sinking one loses its buoyancy over a few seconds.
 	var float_mult := 0.8 + 0.2 * hull_frac()
