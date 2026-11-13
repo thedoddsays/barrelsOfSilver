@@ -35,7 +35,7 @@ Flag-style ship combat and looks), so systems built here should carry forward.
   gameplay loop, systems. **Keep its decision log current** whenever an approach is replaced.
 - `docs/ship-roster.md`: 20 ship types, stats, rig profiles, rarity, fleet, art scope (v3,
   owner decisions made 2026-11-12: sloop start, fleet of 3–4, all tiers in release 1).
-- `docs/famous-pirates.md`: historical pirates and their unique ships at real sizes (draft v1).
+- `docs/famous-pirates.md`: historical pirates and their unique ships at real sizes (v2: owner decisions recorded; legends, timeline and alliances still open).
   Depict real pirates from the historical record only, never from modern media (AC4: Black Flag,
   Pirates of the Caribbean, Black Sails, Our Flag Means Death). Edward Kenway is Ubisoft's, never use.
 - **Rule: every ship at sea can be captured and sailed by the player; no enemy-only ships.**
@@ -55,7 +55,7 @@ Flag-style ship combat and looks), so systems built here should carry forward.
   blocky/pixelated; summed sines looked like a tiled image (owner, 2026-11-12). Avoid both.
   Integer hash, not sin() hash, so it stays stable at large world coordinates.
 - `ship.gd`: RigidBody3D, 8 buoyancy probes, anisotropic hull drag (keel), wind thrust by
-  point of sail (in irons < 40°, best on a broad reach), rudder bite scales with speed, heel
+  point of sail (in irons < 30° with a 25–35% thrust floor head to wind, best on a broad reach), rudder bite scales with speed, heel
   torque, braced yards, furl/unfurl sails (W/S: furled / battle / full), wake particles.
   Uses Pirates!-style "game scale": top speed about 12 m/s; HUD knots × 0.5 so they read
   realistically. Ship visuals are placeholder primitives.
@@ -96,12 +96,26 @@ Flag-style ship combat and looks), so systems built here should carry forward.
     to fit the stylized-realism art direction. Aim arcs still flicker a little (much better than before);
     upwind is less punishing but not final. Owner: good enough for now, fine-tune both in a later
     tuning pass. Milestone 2 combat counts as working.
+- **Collisions (2026-11-13):** ships collide physically with each other and with islands (static cylinders).
+  `Ship._integrate_forces` reads contacts (`contact_monitor` on): ramming splits damage by how much each
+  ship drove into the other (rammed ≈ 4 hull per m/s above 1.5 m/s, ×1.0 on a square side hit, ×0.5 end-on;
+  rammer 0.8 per m/s; scaled by sqrt(mass ratio)), plus crew loss on the rammed ship. Islands: 1.5 per m/s.
+  **Gotcha:** contacts arrive after the solver has resolved the crash, so impact speed must come from
+  `pre_impact_velocity()` (velocity 2 ticks back), never the current velocity. **Gotcha 2:** don't use
+  the contact normal either: on angled box-on-box hits it's often the rammer's own face, which made the
+  rammer look rammed (owner playtest 2026-11-13). Roles come from each ship's speed toward the contact point. `impact(kind, closing, damage)`
+  signal is the hook for sound/shake/HUD. The AI doesn't ram on purpose (yet).
+- **Stress test (2026-11-13):** `scenes/debug/stress_test.tscn` (F6; `]`/`[` add/remove 5 AI pairs, `B` benchmark,
+  `V` vsync; `-- --bench --quit` runs it from the command line). Extends main.gd (`island_count` is the hook).
+  scenes/debug and scripts/debug are excluded from exports. Owner PC (RTX 4060, Ryzen 7 3700X): 20 AI ships
+  236 FPS, 40 ships 110, 60 ships 55. Main costs: ~30 draw calls per placeholder ship (many primitives) and
+  GDScript buoyancy/AI (~8 ms physics at 60 ships). Real merged models and distant-ship LOD are the levers.
   - Godot on the dev box: `C:\Users\Stephen\Documents\Tools\Godot\Godot_v4.7.2-stable_win64.exe\` is a
     *folder*; the console exe is inside it.
 
 ## Open issues / feedback from last playtest
 - ~~"Very pixelated" visuals~~: resolved. Owner confirmed (2026-11-12) the water looks much
-  better after the switch to sine ripples + distance fade.
+  better after the ripples were reworked (now gradient noise; see the ocean notes above).
 - ~~Speed was "super slow"~~: resolved. After the ~4× boost the owner confirmed (2026-11-12)
   it's "noticeably better, actually feels like it's moving". Treat current ship.gd values as
   the baseline feel.

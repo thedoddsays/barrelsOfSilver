@@ -11,6 +11,7 @@ var sun: DirectionalLight3D
 var player: Ship
 var hud: Hud
 var ships_sunk := 0
+var island_count := 14  ## raised by the stress test
 
 var _islands: Array[Vector3] = []  ## (x, z, radius) of each island
 
@@ -186,7 +187,7 @@ func _spawn_islands() -> void:
 	var trunk := _mat(Color(0.4, 0.3, 0.2))
 	var leaves := _mat(Color(0.18, 0.4, 0.12))
 
-	for i in 14:
+	for i in island_count:
 		var pos := Vector2.ZERO
 		while pos.length() < 150.0:
 			pos = Vector2(rng.randf_range(-900.0, 900.0), rng.randf_range(-900.0, 900.0))

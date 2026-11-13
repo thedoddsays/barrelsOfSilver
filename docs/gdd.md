@@ -161,8 +161,8 @@ publishing anything.
 | Can it sail across the water with wind? | Yes. Points of sail, tacking, sail settings. Owner confirmed the feel. | 46d042d, 2026-11-12 |
 | How does it react to waves? | Pitches, rolls and heels with the waves and wind. | 46d042d |
 | Can two ships fight? | Yes. Broadsides, 3 ammo types, AI captain. Owner: working. | 75f3aaf, 2026-11-13 |
-| Ship vs. island, rock and ship collisions? | **Not verified.** Cannonballs hit islands; ship-on-ship and ship-on-island contact untested. | |
-| Can the renderer handle a large map? | **Not tested.** See section 5. | |
+| Ship vs. island and ship collisions? | Yes. Ships collide solidly with each other and with islands, with no tunnelling or launching. **Ramming:** the rammed ship takes heavy hull and some crew damage, the rammer a little (about 5:1); a 10 m/s ram into a ship's side costs about a third of the target's hull. Head-on hits damage both equally. Islands do modest damage. Slow nudges (under 1.5 m/s) do nothing. Rocks/reefs don't exist yet. | Headless scenario tests, 2026-11-13 |
+| Can the renderer handle many ships? | Yes, with headroom. On the owner's PC (RTX 4060, Ryzen 7 3700X, 1600×900, vsync off): 0 AI ships 436 FPS, 10 ships 396, 20 ships 236, 40 ships 110, 60 ships 55 (all fighting on screen, 40 islands). Cost grows about 30 draw calls per ship because placeholder ships are ~30 separate shapes; real models should cut that a lot. Large-map streaming is still untested. | `scenes/debug/stress_test.tscn`, 2026-11-13 |
 
 ### 4.2 What we tried and why we changed it
 | Area | Tried | What went wrong | Now | Evidence |
@@ -176,6 +176,8 @@ publishing anything.
 | Aiming | Shots inherit ship velocity | Firing arcs skewed and flickered | Shots fire square to the hull; side switch has hysteresis. Slight flicker remains (tuning pass) | 34fa4ff |
 | Upwind sailing | Zero thrust within 40° of the wind | Too punishing | 25–35% thrust head to wind; irons under 30°. Still to tune | 34fa4ff |
 | Firing controls | Keys vs. mouse | Owner choice | Left click fires the side facing the mouse | 75f3aaf |
+| Collision damage | Measuring impact speed from the ships' velocity when the contact is reported | Godot reports contacts *after* resolving the crash, so speeds were already cancelled: rams read half speed, islands read zero, and who-rammed-whom came out wrong | Measure from each ship's velocity a couple of physics ticks earlier | 2026-11-13 |
+| Collision damage | Deciding who rammed whom from the contact surface's direction | Owner playtest: the rammer took more damage than the target. On angled hits Godot often reports the rammer's own bow or side face, so the target's speed looked like it was driving into the rammer | Judge each ship by its speed toward the point of contact; rammer now takes about 1/5 of what the target takes in live fights too | 2026-11-13 |
 
 ---
 
@@ -193,7 +195,9 @@ Known:
 - What do ships look like at release (8 hull models per the roster)?
 
 To test (technical):
-- How many ships and islands can be on screen at 60 fps on the recommended hardware?
+- How many ships and islands can be on screen at 60 fps on the recommended hardware? Measured on the
+  owner's PC (above recommended): about 60 fighting ships at 55 FPS, 40 at 110 FPS. Islands are cheap.
+  Still to measure: the Mint machine and a recommended-spec (GTX 1660 / RTX 2060) machine.
 - How far can the player see, and what does streaming or culling of distant areas look like?
 
 ---
