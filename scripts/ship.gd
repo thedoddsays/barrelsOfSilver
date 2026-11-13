@@ -160,8 +160,9 @@ var _probes: Array[Vector3] = []
 var _guns: Array[Vector3] = []  ## starboard-side gun positions (local); port mirrors x
 var _yards: Array[Node3D] = []  ## square yards, braced round to the wind
 var _booms: Array[Node3D] = []  ## gaff booms, swung out to leeward
-var _jibs: Array[Node3D] = []  ## headsails, sheeted to leeward
-var _canvas: Array[Dictionary] = []  ## {node, height, base, hang}: furled by scaling
+var _jibs: Array[Dictionary] = []  ## headsails: {pivot, base}, swung round their stay
+var _canvas: Array[Node3D] = []  ## sails, furled by scaling y toward their spar (origin)
+var _bellied: Array[Node3D] = []  ## fore-and-aft sails, flipped to belly out to leeward
 var _wake: CPUParticles3D
 
 
@@ -362,9 +363,13 @@ func gun_count() -> int:
 ## Up to `max_count` guns from the lowest gun deck, evenly spread bow to stern (always
 ## including both ends). Used to draw readable firing arcs for big broadsides.
 func aim_guns(max_count: int) -> Array[int]:
+	# Lowest gun deck. Guns on a model follow the sheer, so a row isn't perfectly level.
+	var low := INF
+	for g in _guns:
+		low = minf(low, g.y)
 	var row: Array[int] = []
 	for i in _guns.size():
-		if is_equal_approx(_guns[i].y, _guns[0].y):
+		if _guns[i].y < low + 0.15 * _height:
 			row.append(i)
 	if row.size() <= max_count:
 		return row
@@ -688,13 +693,11 @@ func _point_of_sail_name(off_deg: float) -> String:
 
 
 func _process(delta: float) -> void:
-	# Furl/unfurl: square sails gather up to their yard, fore-and-aft sails drop to the boom.
+	# Furl/unfurl: square sails gather up to their yard, gaff sails drop to the boom and
+	# headsails slide down their stay (each sail's origin is on the spar it furls to).
 	var k := maxf(sail_amount, 0.04)
 	for c in _canvas:
-		var node: Node3D = c["node"]
-		var h: float = c["height"]
-		node.scale.y = k
-		node.position.y = float(c["base"]) + (-h if c["hang"] else h) * 0.5 * k
+		c.scale.y = k
 	# Trim to the wind (cosmetic). Square yards brace round; booms and jibs swing out to
 	# leeward by about half the wind's angle off the bow.
 	var wl := global_basis.inverse() * Wind.direction()
@@ -707,7 +710,13 @@ func _process(delta: float) -> void:
 	for b in _booms:
 		b.rotation.y = lerp_angle(b.rotation.y, boom, delta * 1.2)
 	for j in _jibs:
-		j.rotation.y = lerp_angle(j.rotation.y, boom * 0.6, delta * 1.2)
+		var a := lerp_angle(float(j["angle"]), boom * 0.6, delta * 1.2)
+		j["angle"] = a
+		(j["pivot"] as Node3D).basis = (j["base"] as Basis) * Basis(Vector3.UP, a)
+	# Fore-and-aft canvas bellies out to leeward.
+	var lee := 1.0 if wl.x >= 0.0 else -1.0
+	for c in _bellied:
+		c.scale.x = lee
 	# Forward speed only, so bobbing in a swell doesn't leave a wake.
 	_wake.emitting = absf(_v_fwd) > 0.8 and not is_sunk
 
@@ -726,15 +735,77 @@ func _build_collision() -> void:
 	add_child(col)
 
 
-## Placeholder geometry scaled from the original sloop layout. Proportions are fractions of
-## length (L), beam (B) and hull height (H) so every spec gets a believable silhouette.
 func _build_visuals() -> void:
+	var spar := _mat(Color(0.30, 0.21, 0.13), 0.8)
+	var canvas := _mat(sail_color * 0.72, 0.95)
+	canvas.cull_mode = BaseMaterial3D.CULL_DISABLED
+	canvas.backlight_enabled = true  # sun shining through the canvas
+	canvas.backlight = sail_color * 0.2
+	var rig := _build_model() if spec.model != null else _build_placeholder()
+	_build_rig(rig, spar, canvas)
+
+
+## Instance the spec's model and read its marker nodes. Returns the rig layout:
+## {masts: [{foot, head, top, kind}], jib: {tack, head} or {}, flag: Vector3}.
+func _build_model() -> Dictionary:
+	var model := spec.model.instantiate() as Node3D
+	add_child(model)
+	# The topsides texture is neutral; tint it with this ship's colours.
+	for mi in model.find_children("*", "MeshInstance3D", true, false):
+		var m := mi as MeshInstance3D
+		for i in m.mesh.get_surface_count():
+			var mat := m.mesh.surface_get_material(i) as BaseMaterial3D
+			if mat != null and mat.resource_name == "Topsides":
+				var tinted := mat.duplicate() as BaseMaterial3D
+				tinted.albedo_color = Color(hull_color * 1.25, 1.0)
+				m.set_surface_override_material(i, tinted)
+
+	# Marker positions in ship space (the model sits at the ship's origin).
+	var inv := model.global_transform.affine_inverse()
+	var marker := func(name: String) -> Variant:
+		var n := model.find_child(name, true, false) as Node3D
+		return null if n == null else inv * n.global_position
+
+	# Guns: starboard muzzles, bow to stern (port mirrors them)
+	var guns: Array[Vector3] = []
+	for i in spec.guns_per_side:
+		var g: Variant = marker.call("gun_%d" % i)
+		if g == null:
+			break
+		guns.append(g)
+	if guns.size() == spec.guns_per_side:
+		_guns = guns
+	else:
+		push_warning("%s model has %d gun markers, spec wants %d: using spec layout" % [spec.id, guns.size(), spec.guns_per_side])
+
+	var rig := {"masts": [], "jib": {}, "flag": Vector3(0.0, _mast_top, 0.0)}
+	for m in spec.masts.size():
+		var foot: Variant = marker.call("mast_%d" % m)
+		if foot == null:
+			break
+		var head: Variant = marker.call("mast_%d_head" % m)
+		var top: Vector3 = foot + Vector3.UP * spec.mast_height_frac * _len
+		rig["masts"].append({"foot": foot, "head": head if head != null else top, "top": top,
+			"kind": spec.masts[m], "mesh": false})
+	var flag: Variant = marker.call("flag")
+	if flag != null:
+		rig["flag"] = flag
+		_mast_top = (flag as Vector3).y
+	var tack: Variant = marker.call("jib_tack")
+	var jhead: Variant = marker.call("jib_head")
+	if spec.jib and tack != null and jhead != null:
+		rig["jib"] = {"tack": tack, "head": jhead}
+	return rig
+
+
+## Placeholder geometry from primitives, scaled from the original sloop layout so every
+## spec without a model still gets a believable silhouette. Proportions are fractions of
+## length (L), beam (B) and hull height (H).
+func _build_placeholder() -> Dictionary:
 	var wood := _mat(hull_color, 0.85)
 	var dark := _mat(Color(0.12, 0.08, 0.05), 0.9)
 	var deck := _mat(Color(0.55, 0.40, 0.25), 0.8)
-	var canvas := _mat(sail_color, 0.95)
 	var black := _mat(Color(0.04, 0.04, 0.04), 0.9)
-	var flag := _mat(flag_color, 0.9)
 	var L := _len
 	var B := _beam
 	var H := _height
@@ -754,8 +825,10 @@ func _build_visuals() -> void:
 	bow.position = Vector3(0.0, 0.0, -0.5 * L)
 	add_child(bow)
 
-	var sprit := _add_cyl(0.12 * _vscale, 0.375 * L, Vector3(0.0, 0.5 * H + 0.78 * _vscale, -0.74 * L), wood)
+	var sprit_at := Vector3(0.0, 0.5 * H + 0.78 * _vscale, -0.74 * L)
+	var sprit := _add_cyl(0.12 * _vscale, 0.375 * L, sprit_at, wood)
 	sprit.rotation_degrees.x = -75.0
+	var sprit_dir := Vector3(0.0, cos(deg_to_rad(75.0)), -sin(deg_to_rad(75.0)))
 
 	# Sterncastle
 	_add_box(Vector3(B, 0.64 * H, 0.2 * L), Vector3(0.0, 0.82 * H, 0.275 * L), wood)
@@ -767,110 +840,166 @@ func _build_visuals() -> void:
 			_add_box(Vector3(0.1, 0.45, 0.6), Vector3((B * 0.5 + 0.02) * side, g.y, g.z), black)
 
 	# Masts, bow to stern
-	var mast_rigs := spec.masts
-	var n := clampi(mast_rigs.size(), 1, 3)
+	var rig := {"masts": [], "jib": {}, "flag": Vector3.ZERO}
+	var n := clampi(spec.masts.size(), 1, 3)
 	var mast_z: Array = [[-0.1], [-0.2, 0.12], [-0.28, -0.02, 0.22]][n - 1]
 	var mast_k: Array = [[1.0], [1.0, 0.9], [0.92, 1.0, 0.75]][n - 1]
 	var deck_y := 0.5 * H
 	var tallest := spec.mast_height_frac * L
 	_mast_top = deck_y + tallest
-	var main_top := Vector3(0.0, _mast_top, float(mast_z[0]) * L)
 	for m in n:
-		var mz: float = float(mast_z[m]) * L
 		var h: float = tallest * float(mast_k[m])
-		_add_cyl(0.18 * _vscale, h, Vector3(0.0, deck_y + h * 0.5, mz), dark)
-		if m < mast_rigs.size() and mast_rigs[m] == "gaff":
-			# Fore-and-aft sail aft of the mast, as long as the deck allows.
-			var sail_len := minf(0.42 * L, 0.4 * L - mz)
-			_add_gaff_sail(Vector3(0.0, deck_y, mz), sail_len, h * 0.6, 1.5 * _vscale, dark, canvas)
-		else:
-			_add_square_sail(Vector3(0.0, deck_y + 0.4 * h, mz), 0.37 * h, 0.31 * h, dark, canvas)
-			_add_square_sail(Vector3(0.0, deck_y + 0.68 * h, mz), 0.29 * h, 0.23 * h, dark, canvas)
+		var foot := Vector3(0.0, deck_y, float(mast_z[m]) * L)
+		_add_cyl(0.18 * _vscale, h, foot + Vector3.UP * h * 0.5, dark)
+		var kind: String = spec.masts[m] if m < spec.masts.size() else "square"
+		rig["masts"].append({"foot": foot, "head": foot + Vector3.UP * (1.5 * _vscale + h * 0.6),
+			"top": foot + Vector3.UP * h, "kind": kind})
 		if float(mast_k[m]) >= 1.0:
-			main_top = Vector3(0.0, deck_y + h, mz)
-
+			rig["flag"] = foot + Vector3.UP * h
 	if spec.jib:
-		var fore_z: float = float(mast_z[0]) * L
-		var tack_z := -0.52 * L
-		_add_jib(Vector3(0.0, deck_y, tack_z), fore_z - tack_z, tallest * float(mast_k[0]) * 0.6, canvas)
-
-	# Colours at the main masthead
-	_add_box(Vector3(1.2, 0.8, 0.03) * maxf(_vscale, 1.0), main_top + Vector3(0.65, 0.2, 0.0), flag)
+		var fore: Dictionary = rig["masts"][0]
+		rig["jib"] = {"tack": sprit_at + sprit_dir * 0.16 * L,
+			"head": (fore["foot"] as Vector3).lerp(fore["top"], 0.85)}
+	return rig
 
 
-## Square sail hanging from a yard that braces round to the wind.
-func _add_square_sail(pos: Vector3, w: float, h: float, spar_mat: Material, sail_mat: Material) -> void:
+## Sails and running spars on the rig layout, plus the colours at the masthead.
+func _build_rig(rig: Dictionary, spar: Material, canvas: Material) -> void:
+	for m: Dictionary in rig["masts"]:
+		var foot: Vector3 = m["foot"]
+		var top: Vector3 = m["top"]
+		var mh := top.y - foot.y
+		if m["kind"] == "gaff":
+			# Fore-and-aft sail aft of the mast, as long as the deck allows.
+			var sail_len := minf(0.42 * _len, 0.4 * _len - foot.z)
+			var boom_h := 1.5 * _vscale
+			var throat := (m["head"] as Vector3).y - foot.y
+			_add_gaff_sail(foot, sail_len, throat - boom_h, boom_h, spar, canvas)
+		else:
+			_add_square_sail(foot + Vector3.UP * 0.555 * mh, 0.37 * mh, 0.31 * mh, spar, canvas)
+			_add_square_sail(foot + Vector3.UP * 0.795 * mh, 0.29 * mh, 0.23 * mh, spar, canvas)
+	var jib: Dictionary = rig["jib"]
+	if not jib.is_empty() and not (rig["masts"] as Array).is_empty():
+		var fore: Dictionary = rig["masts"][0]
+		var foot: Vector3 = fore["foot"]
+		var tack: Vector3 = jib["tack"]
+		var clew := Vector3(0.0, foot.y + 1.8 * _vscale, lerpf(foot.z, tack.z, 0.3))
+		_add_jib(tack, jib["head"], clew, canvas)
+	# Colours at the masthead
+	var flag := _mat(flag_color, 0.9)
+	var fs := maxf(_vscale, 1.0)
+	_add_box(Vector3(1.2, 0.8, 0.03) * fs, (rig["flag"] as Vector3) + Vector3(0.65, -0.45, 0.0) * fs, flag)
+
+
+## Square sail hanging from a yard that braces round to the wind; bellies forward.
+func _add_square_sail(yard_pos: Vector3, w: float, h: float, spar_mat: Material, sail_mat: Material) -> void:
 	var yard := Node3D.new()
-	yard.position = pos
+	yard.position = yard_pos
 	add_child(yard)
 	_yards.append(yard)
-
-	var spar := MeshInstance3D.new()
-	var cyl := CylinderMesh.new()
-	cyl.top_radius = 0.09 * _vscale
-	cyl.bottom_radius = 0.09 * _vscale
-	cyl.height = w + 0.6
-	spar.mesh = cyl
-	spar.material_override = spar_mat
-	spar.rotation_degrees.z = 90.0
-	yard.add_child(spar)
-
+	_add_spar(yard, Vector3(-w * 0.5 - 0.3, 0.0, 0.0), Vector3(w * 0.5 + 0.3, 0.0, 0.0), 0.09 * _vscale, spar_mat)
 	var sail := MeshInstance3D.new()
-	var box := BoxMesh.new()
-	box.size = Vector3(w, h, 0.06)
-	sail.mesh = box
+	sail.mesh = _sail_mesh([Vector3(-w * 0.55, -h, 0.0), Vector3(w * 0.55, -h, 0.0),
+		Vector3(w * 0.5, -0.05, 0.0), Vector3(-w * 0.5, -0.05, 0.0)], Vector3.FORWARD, 0.12 * h)
 	sail.material_override = sail_mat
+	sail.position.z = -0.08 * _vscale
 	yard.add_child(sail)
-	_canvas.append({"node": sail, "height": h, "base": 0.0, "hang": true})
+	_canvas.append(sail)
 
 
-## Fore-and-aft (gaff) sail: boom and gaff aft of the mast, swinging out to leeward.
+## Fore-and-aft (gaff) sail: on a boom and a peaked gaff aft of the mast, swinging out to
+## leeward. The gaff is part of the sail node, so furling lowers it onto the boom.
 func _add_gaff_sail(mast_foot: Vector3, length: float, h: float, boom_h: float,
 		spar_mat: Material, sail_mat: Material) -> void:
 	var pivot := Node3D.new()
 	pivot.position = mast_foot
 	add_child(pivot)
 	_booms.append(pivot)
-
-	for y: float in [boom_h, boom_h + h]:  # boom, then gaff
-		var spar := MeshInstance3D.new()
-		var cyl := CylinderMesh.new()
-		cyl.top_radius = 0.08 * _vscale
-		cyl.bottom_radius = 0.08 * _vscale
-		cyl.height = length
-		spar.mesh = cyl
-		spar.material_override = spar_mat
-		spar.rotation_degrees.x = 90.0
-		spar.position = Vector3(0.0, y, length * 0.5)
-		pivot.add_child(spar)
+	var r := 0.08 * _vscale
+	_add_spar(pivot, Vector3(0.0, boom_h, 0.2), Vector3(0.0, boom_h, length + 0.3), r, spar_mat)
 
 	var sail := MeshInstance3D.new()
-	var box := BoxMesh.new()
-	box.size = Vector3(0.06, h, length)
-	sail.mesh = box
-	sail.material_override = sail_mat
-	sail.position.z = length * 0.5
+	sail.position.y = boom_h
 	pivot.add_child(sail)
-	_canvas.append({"node": sail, "height": h, "base": boom_h, "hang": false})
+	# Gaff about two-thirds the boom's length, peaked up 30 degrees (owner: a gaff as long as
+	# the boom looked wrong). The leech slants forward from the boom end up to the peak.
+	var throat := Vector3(0.0, h, 0.3)
+	var gaff_len := 0.65 * length
+	var peak := throat + Vector3(0.0, sin(deg_to_rad(30.0)), cos(deg_to_rad(30.0))) * gaff_len
+	sail.mesh = _sail_mesh([Vector3(0.0, 0.1, 0.3), Vector3(0.0, 0.1, length), peak, throat],
+		Vector3.RIGHT, 0.11 * length)
+	sail.material_override = sail_mat
+	_add_spar(sail, throat + Vector3(0.0, 0.1, -0.15), peak + (peak - throat).normalized() * 0.4, r * 0.85, spar_mat)
+	_canvas.append(sail)
+	_bellied.append(sail)
 
 
-## Triangular headsail from the bow up toward the foremast, sheeted to leeward.
-func _add_jib(tack: Vector3, length: float, h: float, sail_mat: Material) -> void:
+## Triangular headsail hoisted on a stay from `tack` up to `head`, sheeted aft to `clew`.
+## It swings round the stay to leeward and is lowered down the stay to furl.
+func _add_jib(tack: Vector3, head: Vector3, clew: Vector3, sail_mat: Material) -> void:
+	var up := (head - tack).normalized()
+	var z := Vector3.RIGHT.cross(up).normalized()
+	var base := Basis(up.cross(z).normalized(), up, z)
 	var pivot := Node3D.new()
 	pivot.position = tack
+	pivot.basis = base
 	add_child(pivot)
-	_jibs.append(pivot)
-
+	_jibs.append({"pivot": pivot, "base": base, "angle": 0.0})
+	var inv := base.inverse()
+	var lh := inv * (head - tack)
+	var lc := inv * (clew - tack)
+	lc.x = 0.0
 	var sail := MeshInstance3D.new()
-	var tri := PrismMesh.new()
-	tri.size = Vector3(length, h, 0.05)
-	tri.left_to_right = 0.0  # right angle at the front: the luff runs up the forestay
-	sail.mesh = tri
+	sail.mesh = _sail_mesh([Vector3.ZERO, lc, lh, lh], Vector3.RIGHT, 0.08 * lh.length())
 	sail.material_override = sail_mat
-	sail.rotation_degrees.y = -90.0  # lay the triangle along the ship (+X -> aft)
-	sail.position.z = length * 0.5
 	pivot.add_child(sail)
-	_canvas.append({"node": sail, "height": h, "base": 0.0, "hang": false})
+	_canvas.append(sail)
+	_bellied.append(sail)
+
+
+## A sail as a curved patch between four corners (bottom-front, bottom-back, top-back,
+## top-front; repeat a corner for a triangle), bellied along `belly` by up to `depth`.
+static func _sail_mesh(c: Array, belly: Vector3, depth: float) -> ArrayMesh:
+	const N := 8
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var pts: Array[Vector3] = []
+	for j in N + 1:
+		var v := float(j) / N
+		for i in N + 1:
+			var u := float(i) / N
+			var p: Vector3 = (c[0] as Vector3).lerp(c[1], u).lerp((c[3] as Vector3).lerp(c[2], u), v)
+			# Deepest a third of the way back from the leading edge, flatter at the leech.
+			p += belly * depth * sin(PI * pow(u, 0.7)) * sin(PI * v)
+			pts.append(p)
+	for j in N:
+		for i in N:
+			var a := j * (N + 1) + i
+			var quad := [a, a + 1, a + N + 2, a, a + N + 2, a + N + 1]
+			for q: int in quad:
+				st.set_uv(Vector2(float(q % (N + 1)) / N, float(q / (N + 1)) / N))
+				st.add_vertex(pts[q])
+	st.index()  # share vertices so the normals smooth across the belly
+	st.generate_normals()
+	return st.commit()
+
+
+## A round spar between two points, as a child of `parent`.
+func _add_spar(parent: Node3D, a: Vector3, b: Vector3, radius: float, m: Material) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	var c := CylinderMesh.new()
+	c.top_radius = radius
+	c.bottom_radius = radius
+	c.height = a.distance_to(b)
+	c.radial_segments = 8
+	c.rings = 1
+	mi.mesh = c
+	mi.material_override = m
+	var y := (b - a).normalized()
+	var x := y.cross(Vector3.FORWARD if absf(y.dot(Vector3.FORWARD)) < 0.9 else Vector3.RIGHT).normalized()
+	mi.transform = Transform3D(Basis(x, y, x.cross(y)), (a + b) * 0.5)
+	parent.add_child(mi)
+	return mi
 
 
 func _build_wake() -> void:

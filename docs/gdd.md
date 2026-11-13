@@ -126,7 +126,8 @@ What that means for systems built now (release 1 stays single-player, one region
 | Platforms | Windows 11, Linux (Mint) | Owner's machines; possible Steam release |
 | Exports | `export_presets.cfg`, `export.sh` | Windows icon editing off, so Linux can build Windows exports without Wine |
 | Source control | Git, GitHub | |
-| **Owner:** 3D modeling, audio, other tools | | |
+| 3D models | Blender 5.x, driven by Python scripts in `tools/blender/` | Owner installed Blender (2026-11-13). Ships are generated from numbers (hull lines, deck layout, rig), so they're 100% original, match the physics dimensions exactly and can be rebuilt or re-proportioned in seconds; exported as .glb so the game never depends on Blender. An artist can later model over the same dimensions and marker points |
+| **Owner:** audio, other tools | | |
 
 ### 2.1 Target hardware
 Estimates only; not yet measured. Measure with an FPS counter on real machines before
@@ -179,6 +180,7 @@ publishing anything.
 | Collision damage | Measuring impact speed from the ships' velocity when the contact is reported | Godot reports contacts *after* resolving the crash, so speeds were already cancelled: rams read half speed, islands read zero, and who-rammed-whom came out wrong | Measure from each ship's velocity a couple of physics ticks earlier | 2026-11-13 |
 | Fleet formation | Wide stations (rear escort ~90 m astern), flagship capped to 90% of the slowest escort, max zoom 400 m | Owner playtest: slower escorts dropped out of the camera view, and the camera couldn't zoom out far enough | Tighter stations (rear ~65 m), 80% pace, the fleet waits for anyone >20 m behind station, pace counts tacking upwind, zoom out to 650 m | 2026-11-13 |
 | Fleet collisions | Distance-only friend avoidance | Escorts fought their own stations (stations sat inside the avoid radius), and the heavy frigate rammed friends mid-battle | Look-ahead (predicted closest approach over 6 s), tighter clearance in formation, separate combat lanes per escort | 2026-11-13 |
+| Ship visuals | Primitives (boxes, prisms, cylinders) built at runtime, ~30 draw calls per ship | Placeholder look; draw calls were the main render cost in the stress test | Script-generated Blender model per hull (sloop first), animated sails still built in code as curved canvas; ~15 draw calls per ship | 2026-11-13 |
 | Fleet targeting | Once a battle started, escorts fought any non-fleet ship within 250 m of the flagship | Owner: a passing trader or a ship trying to flee shouldn't be attacked just for being near a fight | Escorts fight only aggressors: ships that attacked the fleet or that the player attacked | 2026-11-13 |
 | Collision damage | Deciding who rammed whom from the contact surface's direction | Owner playtest: the rammer took more damage than the target. On angled hits Godot often reports the rammer's own bow or side face, so the target's speed looked like it was driving into the rammer | Judge each ship by its speed toward the point of contact; rammer now takes about 1/5 of what the target takes in live fights too | 2026-11-13 |
 
