@@ -88,6 +88,11 @@ Flag-style ship combat and looks), so systems built here should carry forward.
     (arcs stay square to the hull; the AI leads using target velocity only). Arcs also get a filled zone on the water.
   - Upwind was too punishing: head to wind now gives 25–35% thrust (was 0 inside 40°), irons is <30°,
     and the rudder keeps 50% bite at zero speed (was 25%).
+  - Retest (2026-11-13): owner confirmed the new smoke makes cannonballs much easier to see. It reads
+    as cartoonish, which is fine as a **placeholder**; the VFX pass must replace it with realistic smoke
+    to fit the stylized-realism art direction. Aim arcs still flicker a little (much better than before);
+    upwind is less punishing but not final. Owner: good enough for now, fine-tune both in a later
+    tuning pass. Milestone 2 combat counts as working.
   - Godot on the dev box: `C:\Users\Stephen\Documents\Tools\Godot\Godot_v4.7.2-stable_win64.exe\` is a
     *folder*; the console exe is inside it.
 
@@ -100,7 +105,8 @@ Flag-style ship combat and looks), so systems built here should carry forward.
 
 ## Planned next steps
 1. ~~Confirm sailing feel and visual quality on the owner's machine.~~ Done 2026-11-12.
-2. Broadside cannon combat vs. an AI ship (ammo types; sail/hull/crew damage). Built; awaiting playtest.
+2. ~~Broadside cannon combat vs. an AI ship (ammo types; sail/hull/crew damage).~~ Working, 2026-11-13;
+   aim-arc flicker, upwind feel and smoke look go to a later tuning/VFX pass.
 3. Make the world editable in the editor; real ship models.
 4. Ports (trade, tavern, governor/nation reputation), boarding duel minigame, light
    campaign (aging, fame, treasure hunts). Scope: one region, 6–8 ports.
