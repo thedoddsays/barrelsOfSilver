@@ -177,6 +177,8 @@ publishing anything.
 | Upwind sailing | Zero thrust within 40° of the wind | Too punishing | 25–35% thrust head to wind; irons under 30°. Still to tune | 34fa4ff |
 | Firing controls | Keys vs. mouse | Owner choice | Left click fires the side facing the mouse | 75f3aaf |
 | Collision damage | Measuring impact speed from the ships' velocity when the contact is reported | Godot reports contacts *after* resolving the crash, so speeds were already cancelled: rams read half speed, islands read zero, and who-rammed-whom came out wrong | Measure from each ship's velocity a couple of physics ticks earlier | 2026-11-13 |
+| Fleet formation | Wide stations (rear escort ~90 m astern), flagship capped to 90% of the slowest escort, max zoom 400 m | Owner playtest: slower escorts dropped out of the camera view, and the camera couldn't zoom out far enough | Tighter stations (rear ~65 m), 80% pace, the fleet waits for anyone >20 m behind station, pace counts tacking upwind, zoom out to 650 m | 2026-11-13 |
+| Fleet collisions | Distance-only friend avoidance | Escorts fought their own stations (stations sat inside the avoid radius), and the heavy frigate rammed friends mid-battle | Look-ahead (predicted closest approach over 6 s), tighter clearance in formation, separate combat lanes per escort | 2026-11-13 |
 | Collision damage | Deciding who rammed whom from the contact surface's direction | Owner playtest: the rammer took more damage than the target. On angled hits Godot often reports the rammer's own bow or side face, so the target's speed looked like it was driving into the rammer | Judge each ship by its speed toward the point of contact; rammer now takes about 1/5 of what the target takes in live fights too | 2026-11-13 |
 
 ---
@@ -206,7 +208,7 @@ To test (technical):
 
 Known:
 - Start in a sloop (optional hard start in a periagua). Every ship at sea can be captured.
-- Fleet of 3–4 ships: you sail the flagship, the others follow and fight under AI.
+- Fleet of 3–4 ships: you sail the flagship, the others follow and fight under AI. See 6.1.
 - Broadside combat: fire the side facing the mouse; round, chain and grape shot.
 - **Owner wants in release 1 (2026-11-13):** character creation, alignment with nations, and a
   fair amount of ship customization. Details below are still open.
@@ -242,6 +244,57 @@ Known:
   switch sides or sail for none?
 - What else happens at sea or ashore (treasure hunts, rescues, missions)?
 - How does a career end (aging, retirement, score)?
+- **Capturing ships is its own design pass (owner, 2026-11-13).** It will be "a rather robust
+  endeavor", so it is not prototyped yet. Fleet management is designed first (6.1).
+
+### 6.1 Fleet management
+Already decided (2026-11-12): the player sails the flagship directly,
+the other ships fight on their own under AI; the flagship can be switched outside combat only.
+
+**Decided (owner, 2026-11-13):**
+- **Fleet speed: soft cap with leave-behind.** While the fleet sails together, the flagship is
+  held to the slowest ship's top speed (the HUD shows "fleet pace"). A fleet order lets the
+  player break away at full speed; the others follow as best they can and catch up when the
+  player slows or stops.
+- **Friendly fire: off.** The player's cannonballs pass through their own fleet and vice versa.
+  (Today's code hits any ship except the shooter; ships need a side/faction first.)
+- **Crew: auto-split with manual override.** Crew is distributed automatically (each ship's
+  minimum first, then by size and role), and the player can move men between ships.
+  Taking a prize draws a prize crew from the fleet.
+- **Over the cap: strip-and-scuttle, or harbor storage.** With a full fleet, a new prize can be
+  plundered of cargo (and guns) and scuttled, or extra ships can be moored at a friendly port
+  and swapped there later. Harbor storage depends on the port system. The cap doesn't grow
+  with level or fame.
+- **Fleet cap: 4 ships including the flagship** (owner, 2026-11-13; can be revisited).
+- **Formation: loose.** Escorts keep loose stations around and behind the flagship, spaced by
+  size, never ram a friend, and steer around islands.
+- **Engage on command (owner, 2026-11-13).** The fleet ignores every other ship until the
+  flagship engages, so escorts don't go after every ship they come across. Working rule:
+  "engaged" starts when the player opens fire or any fleet ship is hit by an enemy, and
+  ends after 20 quiet seconds with no enemy within 250 m of the flagship. While engaged,
+  escorts fight enemies near the flagship and never stray more than 300 m from it.
+  Confirmed by the owner: being fired upon counts as engaging.
+- **Merchant prizes join the fleet only if the player chooses.** Once in the fleet they are
+  treated like any other ship in battle (no special hang-back behaviour).
+
+**Prototype built (2026-11-13), awaiting owner playtest.** Loose formation, fleet pace (soft
+cap, lifted in battle or with F to break away), friendly fire off, escorts fight enemies near
+the fleet and return to formation after. N adds a debug escort until capture exists. Fleet pace
+counts tacking: a square-rigger that can't point as high as the flagship slows the fleet upwind.
+
+**Proposed, owner to confirm:**
+- **Formation orders:** line astern and line abreast as alternatives to the loose default.
+- **Battle orders (later):** "attack my target", "hold back", "free hunt".
+- **Cargo:** one combined fleet hold for trading, but each ship carries its own share, so a
+  sunk ship takes her cargo down with her.
+- **Officers:** each escort needs an officer as captain (ties into captain skill: the officer's
+  skill sets how well that ship performs). Hiring officers becomes part of growing a fleet.
+- **Losing an escort:** she sinks with her cargo and most of her crew; survivors in boats can
+  be picked up.
+- **Switching flagship:** in port it's instant; at sea the captain takes a boat across, which
+  takes a few seconds.
+- **Fleet panel (UI):** each ship's hull, sails, crew and current order; click a ship to centre
+  the camera on her.
 
 ---
 

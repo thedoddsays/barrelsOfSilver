@@ -205,8 +205,10 @@ different rigs between them (fore-and-aft, square and mixed). Build masts, yards
 and booms as parts that a `ShipSpec` assembles, not as part of each hull model.
 
 ## Technical notes for when we build it
-- Each ship type should be a `Resource` (`ShipSpec`): the stats above, rig profile, gun
-  layout, rarity and model scene. `Ship` reads its spec instead of hard-coded exports.
+- **Done (2026-11-13):** each ship type is a `ShipSpec` resource in `data/ships/` (sloop,
+  brigantine and pirate frigate so far). `Ship` builds its size, physics, guns, rig and
+  placeholder visuals from it. Adding a ship is a new `.tres` file with the numbers above.
+  A model scene per hull family comes with the real art.
 - **Big broadsides need batching.** A 1st rate fires 50 guns, or 300 balls with grapeshot,
   and each ball has a smoke trail. Group guns into batteries (one simulated ball and trail
   stands for several guns) so performance doesn't fall over in fleet battles.

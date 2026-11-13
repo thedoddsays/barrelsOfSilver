@@ -10,7 +10,10 @@ class_name CameraRig
 signal cruise_changed(on: bool)  ## hook for cruise music (crew shanties) later
 
 @export var min_distance := 40.0
-@export var max_distance := 400.0
+@export var max_distance := 650.0  ## far enough to see a whole fleet (owner playtest)
+## The tilt runs from shallow at min_distance to steepest here, and stays steepest beyond
+## (the 40–400 m tilt is the owner-approved baseline; the extra range just pulls back).
+@export var steepest_at := 400.0
 @export var map_fov := 28.0  ## narrow lens = flatter, diorama-like perspective
 
 @export_group("Cruise")
@@ -103,7 +106,7 @@ func _process(delta: float) -> void:
 		yaw += rotate_input * 1.6 * delta
 
 	distance = lerpf(distance, _target_distance, 1.0 - exp(-8.0 * delta))
-	var t := inverse_lerp(min_distance, max_distance, distance)
+	var t := clampf(inverse_lerp(min_distance, steepest_at, distance), 0.0, 1.0)
 	var map_pitch := lerpf(-32.0, -68.0, t)
 	var pitch := deg_to_rad(lerpf(map_pitch, cruise_pitch_deg, b))
 	var eff_distance := lerpf(distance, cruise_distance, b)
@@ -112,7 +115,10 @@ func _process(delta: float) -> void:
 	camera.fov = lerpf(map_fov, cruise_fov, b)
 
 	if environment:
-		environment.fog_density = lerpf(MAP_FOG, CRUISE_FOG, b)
+		# Beyond the steepest-tilt distance, thin the haze as we pull back so the amount of
+		# fog between camera and sea stays the same (otherwise far zoom looks washed out).
+		var map_fog := MAP_FOG * minf(1.0, steepest_at / maxf(distance, 1.0))
+		environment.fog_density = lerpf(map_fog, CRUISE_FOG, b)
 	if sun:
 		sun.directional_shadow_max_distance = eff_distance + 200.0
 

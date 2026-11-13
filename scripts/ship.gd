@@ -1,8 +1,12 @@
 extends RigidBody3D
 class_name Ship
-## A small square-rigged sloop. Floats on buoyancy probes sampled against the Ocean,
-## is driven by the wind according to its point of sail, steers with a rudder whose
-## bite grows with speed, and fights with a broadside of four guns on each side.
+## A sailing ship built from a ShipSpec (data/ships/*.tres): size, mass, rig, guns and
+## handling all come from the spec. Floats on buoyancy probes sampled against the Ocean,
+## is driven by the wind according to its rig's point-of-sail curve, steers with a rudder
+## whose bite grows with speed, and fights with broadsides.
+##
+## Handling was tuned on the 16 m, 20 t sloop. Every force scales from that baseline with
+## the spec's mass, length and beam, so bigger ships feel heavier without hand-tuning.
 ##
 ## The ship reads no input itself. A controller (PlayerController or AiCaptain) sets
 ## `steer_input`, changes sail with sail_up()/sail_down(), and calls fire().
@@ -14,6 +18,8 @@ signal sank
 signal impact(kind: String, closing_speed: float, damage: float)
 ## Every point of hull damage, tagged: "cannon", "rammed", "ramming" or "grounded".
 signal hull_damaged(source: String, amount: float)
+## A broadside was ordered (the fleet uses this to know the flagship has engaged).
+signal fired(side: int)
 
 const SAIL_STEPS := [0.0, 0.5, 1.0]
 const SAIL_NAMES := ["Furled", "Battle sails", "Full sail"]
@@ -42,14 +48,32 @@ const RAM_CREW_LOSS := 0.4  ## crew thrown about / crushed on the rammed ship, p
 const GROUND_DAMAGE := 1.5  ## to a ship striking an island
 const CONTACT_COOLDOWN := 1.0  ## one damage event per collision, not one per physics tick
 
-const GUN_Z := [-4.0, -1.5, 1.0, 3.5]
-const GUN_X := 2.6
-const GUN_Y := 0.25
+const DEFAULT_SPEC := "res://data/ships/sloop.tres"
+## The ship all the tuning below was done on. Other ships scale from it.
+const BASE_MASS := 20000.0
+const BASE_LENGTH := 16.0
+const BASE_BEAM := 4.6
+const BASE_HEIGHT := 2.2
+
+## Point-of-sail curves per rig: (degrees off the wind, efficiency). Every rig keeps an
+## arcade floor head to wind, so you're slow but never stopped dead (owner playtest 1).
+## The second point is where "in irons" ends. MIXED is the curve the sloop was tuned on.
+const RIG_CURVES := {
+	ShipSpec.Rig.FORE_AND_AFT: [Vector2(0, 0.28), Vector2(25, 0.4), Vector2(60, 0.75),
+		Vector2(90, 1.0), Vector2(135, 0.95), Vector2(180, 0.8)],
+	ShipSpec.Rig.MIXED: [Vector2(0, 0.25), Vector2(30, 0.35), Vector2(60, 0.6),
+		Vector2(90, 0.85), Vector2(135, 1.0), Vector2(180, 0.9)],
+	ShipSpec.Rig.SQUARE: [Vector2(0, 0.22), Vector2(35, 0.3), Vector2(60, 0.45),
+		Vector2(90, 0.8), Vector2(135, 1.0), Vector2(180, 0.95)],
+	# Oars aren't simulated yet; oared craft sail like a mixed rig for now.
+	ShipSpec.Rig.OARED: [Vector2(0, 0.25), Vector2(30, 0.35), Vector2(60, 0.6),
+		Vector2(90, 0.85), Vector2(135, 1.0), Vector2(180, 0.9)],
+}
 
 var ocean: Ocean
+@export var spec: ShipSpec  ## falls back to DEFAULT_SPEC (the sloop) when empty
 
-@export_group("Hull")
-@export var hull_mass := 20000.0
+@export_group("Baseline tuning (20 t sloop; scaled per ship)")
 @export var buoyancy_per_probe := 42000.0
 @export var vertical_damping := 8000.0
 @export var forward_drag_linear := 1500.0
@@ -68,8 +92,6 @@ var ocean: Ocean
 @export var knots_display_scale := 0.5
 
 @export_group("Combat")
-@export var max_hull := 100.0
-@export var max_crew := 60.0
 @export var reload_time := 7.0  ## seconds per broadside with a full crew
 @export var free_when_sunk := true  ## false for the player, so references stay valid
 
@@ -77,6 +99,16 @@ var ocean: Ocean
 @export var hull_color := Color(0.30, 0.18, 0.10)
 @export var sail_color := Color(0.93, 0.89, 0.80)
 @export var flag_color := Color(0.04, 0.04, 0.04)
+
+var max_hull := 100.0  ## from the spec
+var max_crew := 80.0  ## from the spec
+## Side in a fight: 0 = the player's fleet, anything else = someone else. Ships on the same
+## side can't hit each other with cannon (friendly fire is off, owner 2026-11-13).
+var faction := 0
+## 0..1 multiplier on sail thrust. The fleet uses it to hold the flagship to fleet pace,
+## and escorts use it to keep station without visibly changing sail.
+var thrust_limit := 1.0
+var status_text := ""  ## what the ship's captain is doing (set by AiCaptain, shown on the HUD)
 
 var steer_input := 0.0  ## -1 = hard to port, +1 = hard to starboard
 var sail_index := 2
@@ -101,19 +133,40 @@ var _contact_cooldown := {}  ## collider instance id -> seconds until it can dam
 var _vel_hist: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
 var _ang_hist: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
 
+# Dimensions and forces derived from the spec in _apply_spec().
+var _len := BASE_LENGTH
+var _beam := BASE_BEAM
+var _height := BASE_HEIGHT
+var _vscale := 1.0  ## vertical scale vs. the sloop (hull height ratio)
+var _mast_top := 14.1
+var _buoyancy := 0.0
+var _depth_cap := 2.5
+var _vdamp := 0.0
+var _drag_lin := 0.0
+var _drag_quad := 0.0
+var _drag_side := 0.0
+var _thrust := 0.0
+var _rudder := 0.0
+var _rudder_speed := 8.0
+var _heel := 0.0
+var _curve: Array = []
+var _irons_deg := 30.0
+
 var _probes: Array[Vector3] = []
-var _yards: Array[Node3D] = []
-var _sails: Array[MeshInstance3D] = []
-var _sail_heights: Array[float] = []
+var _guns: Array[Vector3] = []  ## starboard-side gun positions (local); port mirrors x
+var _yards: Array[Node3D] = []  ## square yards, braced round to the wind
+var _booms: Array[Node3D] = []  ## gaff booms, swung out to leeward
+var _jibs: Array[Node3D] = []  ## headsails, sheeted to leeward
+var _canvas: Array[Dictionary] = []  ## {node, height, base, hang}: furled by scaling
 var _wake: CPUParticles3D
 
 
 func _ready() -> void:
-	mass = hull_mass
+	if spec == null:
+		spec = load(DEFAULT_SPEC)
+	_apply_spec()
 	can_sleep = false
 	angular_damp = 1.5
-	center_of_mass_mode = RigidBody3D.CENTER_OF_MASS_MODE_CUSTOM
-	center_of_mass = Vector3(0.0, -0.9, 0.0)  # low ballast keeps her upright
 	collision_layer = LAYER_SHIPS
 	collision_mask = LAYER_WORLD | LAYER_SHIPS
 	contact_monitor = true  # needed for ramming / grounding damage
@@ -121,12 +174,66 @@ func _ready() -> void:
 	add_to_group("ships")
 	hull = max_hull
 	crew = max_crew
-	for x in [-2.0, 2.0]:
-		for z in [-6.0, -2.0, 2.0, 6.0]:
-			_probes.append(Vector3(x, -1.0, z))
 	_build_collision()
 	_build_visuals()
 	_build_wake()
+
+
+## Derive size, physics and gun layout from the spec, scaling the sloop's tuning.
+func _apply_spec() -> void:
+	_len = spec.length
+	_beam = spec.beam
+	_height = spec.hull_height
+	_vscale = _height / BASE_HEIGHT
+	max_hull = spec.max_hull
+	max_crew = spec.max_crew
+	mass = spec.mass_t * 1000.0
+	var k := mass / BASE_MASS
+	var s := maxf(spec.speed_mult, 0.1)
+
+	center_of_mass_mode = RigidBody3D.CENTER_OF_MASS_MODE_CUSTOM
+	center_of_mass = Vector3(0.0, -0.9 * _vscale, 0.0)  # low ballast keeps her upright
+
+	# Buoyancy: hold the weight at the same relative depth as the sloop.
+	_buoyancy = buoyancy_per_probe * k / _vscale
+	_depth_cap = 2.5 * _vscale
+	_vdamp = vertical_damping * k
+	# Same acceleration as the sloop; dividing drag by speed_mult (and its square) moves
+	# the top speed to exactly speed_mult x the sloop's.
+	_thrust = max_thrust * k
+	_drag_lin = forward_drag_linear * k / s
+	_drag_quad = forward_drag_quadratic * k / (s * s)
+	_drag_side = lateral_drag * k
+	_rudder_speed = full_rudder_speed * s
+	# Turning and heeling scale with the hull's moments of inertia.
+	var yaw_i := mass * (_len * _len + _beam * _beam)
+	var yaw_i0 := BASE_MASS * (BASE_LENGTH * BASE_LENGTH + BASE_BEAM * BASE_BEAM)
+	_rudder = rudder_torque * yaw_i / yaw_i0 * spec.turn_mult
+	var roll_i := mass * (_beam * _beam + _height * _height)
+	var roll_i0 := BASE_MASS * (BASE_BEAM * BASE_BEAM + BASE_HEIGHT * BASE_HEIGHT)
+	_heel = heel_torque * roll_i / roll_i0
+
+	_curve = RIG_CURVES[spec.rig]
+	_irons_deg = (_curve[1] as Vector2).x
+
+	# Buoyancy probes: 2 x 4 grid under the hull, as on the sloop.
+	_probes.clear()
+	for x in [-0.435 * _beam, 0.435 * _beam]:
+		for z in [-0.375, -0.125, 0.125, 0.375]:
+			_probes.append(Vector3(x, -1.0 * _vscale, z * _len))
+
+	# Guns: rows of ports along the side, between 25% forward and 22% aft of amidships.
+	_guns.clear()
+	var decks := clampi(spec.gun_decks, 1, 3)
+	var rows_y: Array = [[0.11], [-0.12, 0.15], [-0.12, 0.12, 0.36]][decks - 1]
+	var per_row := ceili(float(spec.guns_per_side) / decks)
+	var placed := 0
+	for r in decks:
+		var n := mini(per_row, spec.guns_per_side - placed)
+		for i in n:
+			var t := 0.5 if n == 1 else float(i) / float(n - 1)
+			_guns.append(Vector3(_beam * 0.5 + 0.3, float(rows_y[r]) * _height, lerpf(-0.25, 0.22, t) * _len))
+		placed += n
 
 
 # ---------------------------------------------------------------------------
@@ -185,11 +292,14 @@ func reload_progress(side: int) -> float:
 func fire(side: int, ammo: int) -> bool:
 	if not can_fire(side):
 		return false
-	for g in GUN_Z.size():
-		_pending_shots.append({"delay": g * 0.09 + randf() * 0.05, "side": side, "gun": g, "ammo": ammo})
+	# Guns fire in a quick ripple; big broadsides ripple faster so they still land together.
+	var step := minf(0.09, 1.2 / _guns.size())
+	for g in _guns.size():
+		_pending_shots.append({"delay": g * step + randf() * 0.05, "side": side, "gun": g, "ammo": ammo})
 	var t := reload_time / crew_factor()
 	_reload[side] = t
 	_reload_total[side] = t
+	fired.emit(side)
 	return true
 
 
@@ -200,8 +310,69 @@ func side_dir(side: int) -> Vector3:
 	return d.normalized()
 
 
+func length() -> float:
+	return _len
+
+
+func beam() -> float:
+	return _beam
+
+
+## Angle off the wind (degrees) inside which this rig is "in irons".
+func irons_deg() -> float:
+	return _irons_deg
+
+
+## Sail efficiency of this ship's rig at `off_deg` degrees off the wind.
+func rig_efficiency(off_deg: float) -> float:
+	return _efficiency(off_deg)
+
+
+## Rough top speed (m/s) for this ship sailing at compass `bearing` in the current wind,
+## full sail, undamaged. Used to work out fleet pace.
+func potential_speed(bearing: float) -> float:
+	var dir := Vector3(sin(bearing), 0.0, -cos(bearing))
+	var off := rad_to_deg(dir.angle_to(-Wind.direction()))
+	return 12.0 * spec.speed_mult * _efficiency(off)
+
+
+## Like potential_speed(), but if `bearing` is closer to the wind than this rig can point
+## (irons + margin), the best progress toward it by tacking ("velocity made good").
+func potential_progress(bearing: float, margin_deg: float) -> float:
+	var dir := Vector3(sin(bearing), 0.0, -cos(bearing))
+	var off := rad_to_deg(dir.angle_to(-Wind.direction()))
+	var closest := _irons_deg + margin_deg
+	if off >= closest:
+		return 12.0 * spec.speed_mult * _efficiency(off)
+	return 12.0 * spec.speed_mult * _efficiency(closest) * cos(deg_to_rad(closest - off))
+
+
+func is_hostile_to(other: Ship) -> bool:
+	return other != null and other.faction != faction
+
+
+func gun_count() -> int:
+	return _guns.size()
+
+
+## Up to `max_count` guns from the lowest gun deck, evenly spread bow to stern (always
+## including both ends). Used to draw readable firing arcs for big broadsides.
+func aim_guns(max_count: int) -> Array[int]:
+	var row: Array[int] = []
+	for i in _guns.size():
+		if is_equal_approx(_guns[i].y, _guns[0].y):
+			row.append(i)
+	if row.size() <= max_count:
+		return row
+	var picked: Array[int] = []
+	for j in max_count:
+		picked.append(row[roundi(float(j) * (row.size() - 1) / (max_count - 1))])
+	return picked
+
+
 func gun_position(side: int, gun: int) -> Vector3:
-	return global_transform * Vector3(GUN_X * side, GUN_Y, GUN_Z[gun])
+	var g := _guns[gun]
+	return global_transform * Vector3(g.x * side, g.y, g.z)
 
 
 ## World velocity of a ball leaving a gun on `side`. Deliberately does NOT add the
@@ -229,7 +400,8 @@ static func ammo_range(ammo: int) -> float:
 ## Rough hit volume: hull plus rigging. Cheap enough to test every ball every frame.
 func contains_point(p: Vector3) -> bool:
 	var l := global_transform.affine_inverse() * p
-	return absf(l.x) < 2.7 and l.y > -1.6 and l.y < 14.5 and l.z > -10.0 and l.z < 7.0
+	return (absf(l.x) < _beam * 0.5 + 0.4 and l.y > -0.73 * _height and l.y < _mast_top + 0.5
+		and l.z > -0.625 * _len and l.z < 0.4375 * _len)
 
 
 func take_hit(ammo: int, at: Vector3, ball_velocity: Vector3) -> void:
@@ -407,7 +579,7 @@ func _physics_process(delta: float) -> void:
 			wet += 1
 			var r := wp - global_position
 			var pv := linear_velocity + angular_velocity.cross(r)
-			var lift := buoyancy_per_probe * minf(depth, 2.5) * float_mult - pv.y * vertical_damping
+			var lift := _buoyancy * minf(depth, _depth_cap) * float_mult - pv.y * _vdamp
 			apply_force(Vector3.UP * lift, r)
 	var wet_frac := float(wet) / float(_probes.size())
 
@@ -421,12 +593,12 @@ func _physics_process(delta: float) -> void:
 	_v_fwd = linear_velocity.dot(fwd)
 	var v_side := linear_velocity.dot(right)
 	speed_knots = absf(_v_fwd) * 1.944 * knots_display_scale
-	var drag := -fwd * _v_fwd * (forward_drag_linear + forward_drag_quadratic * absf(_v_fwd))
-	drag += -right * v_side * lateral_drag
+	var drag := -fwd * _v_fwd * (_drag_lin + _drag_quad * absf(_v_fwd))
+	drag += -right * v_side * _drag_side
 	apply_central_force(drag * wet_frac)
 
 	if is_sunk:
-		apply_torque(fwd * 60000.0)  # roll over as she goes down
+		apply_torque(fwd * 60000.0 * mass / BASE_MASS)  # roll over as she goes down
 		return
 
 	# --- Sails ----------------------------------------------------------------
@@ -435,16 +607,16 @@ func _physics_process(delta: float) -> void:
 	var off_wind := rad_to_deg(fwd.angle_to(-wind_dir))  # 0 = bow into the wind
 	sail_efficiency = _efficiency(off_wind)
 	point_of_sail = _point_of_sail_name(off_wind)
-	var push := max_thrust * Wind.strength * sail_efficiency * sail_amount * sail_power() * wet_frac
+	var push := _thrust * thrust_limit * Wind.strength * sail_efficiency * sail_amount * sail_power() * wet_frac
 	apply_central_force(fwd * push)
 
 	# Crosswind on the canvas heels her over.
 	var cross := wind_dir.dot(right) * Wind.strength * sail_amount
-	apply_torque(fwd * cross * heel_torque)
+	apply_torque(fwd * cross * _heel)
 
 	# --- Rudder ---------------------------------------------------------------
-	var authority := 0.5 + 0.5 * clampf(absf(_v_fwd) / full_rudder_speed, 0.0, 1.0)
-	apply_torque(Vector3.UP * -steer_input * rudder_torque * authority * wet_frac)
+	var authority := 0.5 + 0.5 * clampf(absf(_v_fwd) / _rudder_speed, 0.0, 1.0)
+	apply_torque(Vector3.UP * -steer_input * _rudder * authority * wet_frac)
 
 
 func _tick_guns(delta: float) -> void:
@@ -466,6 +638,7 @@ func _fire_gun(side: int, gun: int, ammo: int) -> void:
 	for b in balls:
 		var ball := Cannonball.new()
 		ball.shooter = self
+		ball.shooter_faction = faction
 		ball.ammo = ammo
 		ball.ocean = ocean
 		ball.velocity = shot_velocity(side, ammo, randf_range(-spread, spread), randf_range(-spread, spread) * 0.4)
@@ -476,23 +649,18 @@ func _fire_gun(side: int, gun: int, ammo: int) -> void:
 	apply_impulse(-out * 2500.0, muzzle - global_position)  # recoil rocks the hull
 
 
-## Arcade-forgiving point-of-sail curve: slow but never stopped dead head to wind
-## (so you keep steerage and can always turn out of it), best on a broad reach,
-## a touch slower dead downwind.
-const IRONS_DEG := 30.0
-
+## Sail efficiency from this rig's point-of-sail curve (see RIG_CURVES).
 func _efficiency(off_deg: float) -> float:
-	if off_deg < IRONS_DEG:
-		return remap(off_deg, 0.0, IRONS_DEG, 0.25, 0.35)
-	if off_deg < 90.0:
-		return remap(off_deg, IRONS_DEG, 90.0, 0.35, 0.85)
-	if off_deg < 135.0:
-		return remap(off_deg, 90.0, 135.0, 0.85, 1.0)
-	return remap(off_deg, 135.0, 180.0, 1.0, 0.9)
+	for i in range(1, _curve.size()):
+		var b: Vector2 = _curve[i]
+		if off_deg <= b.x:
+			var a: Vector2 = _curve[i - 1]
+			return remap(off_deg, a.x, b.x, a.y, b.y)
+	return (_curve[_curve.size() - 1] as Vector2).y
 
 
 func _point_of_sail_name(off_deg: float) -> String:
-	if off_deg < IRONS_DEG:
+	if off_deg < _irons_deg:
 		return "In irons"
 	if off_deg < 70.0:
 		return "Close-hauled"
@@ -504,17 +672,26 @@ func _point_of_sail_name(off_deg: float) -> String:
 
 
 func _process(delta: float) -> void:
-	# Furl/unfurl the canvas toward the yards.
+	# Furl/unfurl: square sails gather up to their yard, fore-and-aft sails drop to the boom.
 	var k := maxf(sail_amount, 0.04)
-	for i in _sails.size():
-		_sails[i].scale.y = k
-		_sails[i].position.y = -_sail_heights[i] * 0.5 * k
-	# Brace the yards round to catch the wind (cosmetic).
+	for c in _canvas:
+		var node: Node3D = c["node"]
+		var h: float = c["height"]
+		node.scale.y = k
+		node.position.y = float(c["base"]) + (-h if c["hang"] else h) * 0.5 * k
+	# Trim to the wind (cosmetic). Square yards brace round; booms and jibs swing out to
+	# leeward by about half the wind's angle off the bow.
 	var wl := global_basis.inverse() * Wind.direction()
 	var phi := atan2(wl.x, -wl.z)
 	var brace := clampf(-phi * 0.5, -0.9, 0.9)
 	for y in _yards:
 		y.rotation.y = lerp_angle(y.rotation.y, brace, delta * 1.5)
+	var off := absf(atan2(-wl.x, wl.z))  # wind's angle off the bow, 0..PI
+	var boom := signf(wl.x) * minf(off * 0.5, deg_to_rad(80.0))
+	for b in _booms:
+		b.rotation.y = lerp_angle(b.rotation.y, boom, delta * 1.2)
+	for j in _jibs:
+		j.rotation.y = lerp_angle(j.rotation.y, boom * 0.6, delta * 1.2)
 	# Forward speed only, so bobbing in a swell doesn't leave a wake.
 	_wake.emitting = absf(_v_fwd) > 0.8 and not is_sunk
 
@@ -526,13 +703,15 @@ func _process(delta: float) -> void:
 
 func _build_collision() -> void:
 	var shape := BoxShape3D.new()
-	shape.size = Vector3(4.6, 2.2, 16.0)
+	shape.size = Vector3(_beam, _height, _len)
 	var col := CollisionShape3D.new()
 	col.shape = shape
-	col.position = Vector3(0.0, 0.0, -2.0)
+	col.position = Vector3(0.0, 0.0, -0.125 * _len)
 	add_child(col)
 
 
+## Placeholder geometry scaled from the original sloop layout. Proportions are fractions of
+## length (L), beam (B) and hull height (H) so every spec gets a believable silhouette.
 func _build_visuals() -> void:
 	var wood := _mat(hull_color, 0.85)
 	var dark := _mat(Color(0.12, 0.08, 0.05), 0.9)
@@ -540,49 +719,71 @@ func _build_visuals() -> void:
 	var canvas := _mat(sail_color, 0.95)
 	var black := _mat(Color(0.04, 0.04, 0.04), 0.9)
 	var flag := _mat(flag_color, 0.9)
+	var L := _len
+	var B := _beam
+	var H := _height
 
 	# Hull, wale and deck
-	_add_box(Vector3(4.6, 2.2, 12.0), Vector3(0.0, 0.0, 0.0), wood)
-	_add_box(Vector3(4.7, 0.3, 12.1), Vector3(0.0, -0.55, 0.0), dark)
-	_add_box(Vector3(4.2, 0.1, 11.6), Vector3(0.0, 1.12, 0.0), deck)
+	_add_box(Vector3(B, H, 0.75 * L), Vector3.ZERO, wood)
+	_add_box(Vector3(B + 0.1, 0.3 * _vscale, 0.75 * L + 0.1), Vector3(0.0, -0.25 * H, 0.0), dark)
+	_add_box(Vector3(B - 0.4, 0.1, 0.725 * L), Vector3(0.0, 0.5 * H + 0.02, 0.0), deck)
 
 	# Bow: a prism turned so its apex points forward (-Z)
 	var bow := MeshInstance3D.new()
 	var prism := PrismMesh.new()
-	prism.size = Vector3(4.6, 4.0, 2.2)
+	prism.size = Vector3(B, 0.25 * L, H)
 	bow.mesh = prism
 	bow.material_override = wood
 	bow.rotation_degrees = Vector3(-90.0, 0.0, 0.0)
-	bow.position = Vector3(0.0, 0.0, -8.0)
+	bow.position = Vector3(0.0, 0.0, -0.5 * L)
 	add_child(bow)
 
-	var sprit := _add_cyl(0.12, 6.0, Vector3(0.0, 1.88, -11.9), wood)
+	var sprit := _add_cyl(0.12 * _vscale, 0.375 * L, Vector3(0.0, 0.5 * H + 0.78 * _vscale, -0.74 * L), wood)
 	sprit.rotation_degrees.x = -75.0
 
 	# Sterncastle
-	_add_box(Vector3(4.6, 1.4, 3.2), Vector3(0.0, 1.8, 4.4), wood)
-	_add_box(Vector3(4.3, 0.1, 3.0), Vector3(0.0, 2.52, 4.4), deck)
+	_add_box(Vector3(B, 0.64 * H, 0.2 * L), Vector3(0.0, 0.82 * H, 0.275 * L), wood)
+	_add_box(Vector3(B - 0.3, 0.1, 0.19 * L), Vector3(0.0, 1.15 * H, 0.275 * L), deck)
 
-	# Gun ports (positions match GUN_Z / GUN_Y)
+	# Gun ports, one per gun
 	for side in [-1.0, 1.0]:
-		for z: float in GUN_Z:
-			_add_box(Vector3(0.1, 0.45, 0.6), Vector3(2.32 * side, GUN_Y, z), black)
+		for g in _guns:
+			_add_box(Vector3(0.1, 0.45, 0.6), Vector3((B * 0.5 + 0.02) * side, g.y, g.z), black)
 
-	# Masts, yards and sails: (mast z, scale)
-	for m in [[-2.6, 1.0], [2.0, 0.85]]:
-		var mz: float = m[0]
-		var s: float = m[1]
-		var mast_h := 13.0 * s
-		_add_cyl(0.18, mast_h, Vector3(0.0, 1.1 + mast_h * 0.5, mz), dark)
-		var lower_y := 1.1 + 5.2 * s
-		_add_sail(Vector3(0.0, lower_y, mz), 4.8 * s, 4.0 * s, dark, canvas)
-		_add_sail(Vector3(0.0, lower_y + 3.6 * s, mz), 3.8 * s, 3.0 * s, dark, canvas)
+	# Masts, bow to stern
+	var mast_rigs := spec.masts
+	var n := clampi(mast_rigs.size(), 1, 3)
+	var mast_z: Array = [[-0.1], [-0.2, 0.12], [-0.28, -0.02, 0.22]][n - 1]
+	var mast_k: Array = [[1.0], [1.0, 0.9], [0.92, 1.0, 0.75]][n - 1]
+	var deck_y := 0.5 * H
+	var tallest := spec.mast_height_frac * L
+	_mast_top = deck_y + tallest
+	var main_top := Vector3(0.0, _mast_top, float(mast_z[0]) * L)
+	for m in n:
+		var mz: float = float(mast_z[m]) * L
+		var h: float = tallest * float(mast_k[m])
+		_add_cyl(0.18 * _vscale, h, Vector3(0.0, deck_y + h * 0.5, mz), dark)
+		if m < mast_rigs.size() and mast_rigs[m] == "gaff":
+			# Fore-and-aft sail aft of the mast, as long as the deck allows.
+			var sail_len := minf(0.42 * L, 0.4 * L - mz)
+			_add_gaff_sail(Vector3(0.0, deck_y, mz), sail_len, h * 0.6, 1.5 * _vscale, dark, canvas)
+		else:
+			_add_square_sail(Vector3(0.0, deck_y + 0.4 * h, mz), 0.37 * h, 0.31 * h, dark, canvas)
+			_add_square_sail(Vector3(0.0, deck_y + 0.68 * h, mz), 0.29 * h, 0.23 * h, dark, canvas)
+		if float(mast_k[m]) >= 1.0:
+			main_top = Vector3(0.0, deck_y + h, mz)
 
-	# Colours at the foremast head
-	_add_box(Vector3(1.2, 0.8, 0.03), Vector3(0.65, 1.1 + 13.0 + 0.2, -2.6), flag)
+	if spec.jib:
+		var fore_z: float = float(mast_z[0]) * L
+		var tack_z := -0.52 * L
+		_add_jib(Vector3(0.0, deck_y, tack_z), fore_z - tack_z, tallest * float(mast_k[0]) * 0.6, canvas)
+
+	# Colours at the main masthead
+	_add_box(Vector3(1.2, 0.8, 0.03) * maxf(_vscale, 1.0), main_top + Vector3(0.65, 0.2, 0.0), flag)
 
 
-func _add_sail(pos: Vector3, w: float, h: float, spar_mat: Material, sail_mat: Material) -> void:
+## Square sail hanging from a yard that braces round to the wind.
+func _add_square_sail(pos: Vector3, w: float, h: float, spar_mat: Material, sail_mat: Material) -> void:
 	var yard := Node3D.new()
 	yard.position = pos
 	add_child(yard)
@@ -590,8 +791,8 @@ func _add_sail(pos: Vector3, w: float, h: float, spar_mat: Material, sail_mat: M
 
 	var spar := MeshInstance3D.new()
 	var cyl := CylinderMesh.new()
-	cyl.top_radius = 0.09
-	cyl.bottom_radius = 0.09
+	cyl.top_radius = 0.09 * _vscale
+	cyl.bottom_radius = 0.09 * _vscale
 	cyl.height = w + 0.6
 	spar.mesh = cyl
 	spar.material_override = spar_mat
@@ -603,27 +804,74 @@ func _add_sail(pos: Vector3, w: float, h: float, spar_mat: Material, sail_mat: M
 	box.size = Vector3(w, h, 0.06)
 	sail.mesh = box
 	sail.material_override = sail_mat
-	sail.position.y = -h * 0.5
 	yard.add_child(sail)
-	_sails.append(sail)
-	_sail_heights.append(h)
+	_canvas.append({"node": sail, "height": h, "base": 0.0, "hang": true})
+
+
+## Fore-and-aft (gaff) sail: boom and gaff aft of the mast, swinging out to leeward.
+func _add_gaff_sail(mast_foot: Vector3, length: float, h: float, boom_h: float,
+		spar_mat: Material, sail_mat: Material) -> void:
+	var pivot := Node3D.new()
+	pivot.position = mast_foot
+	add_child(pivot)
+	_booms.append(pivot)
+
+	for y: float in [boom_h, boom_h + h]:  # boom, then gaff
+		var spar := MeshInstance3D.new()
+		var cyl := CylinderMesh.new()
+		cyl.top_radius = 0.08 * _vscale
+		cyl.bottom_radius = 0.08 * _vscale
+		cyl.height = length
+		spar.mesh = cyl
+		spar.material_override = spar_mat
+		spar.rotation_degrees.x = 90.0
+		spar.position = Vector3(0.0, y, length * 0.5)
+		pivot.add_child(spar)
+
+	var sail := MeshInstance3D.new()
+	var box := BoxMesh.new()
+	box.size = Vector3(0.06, h, length)
+	sail.mesh = box
+	sail.material_override = sail_mat
+	sail.position.z = length * 0.5
+	pivot.add_child(sail)
+	_canvas.append({"node": sail, "height": h, "base": boom_h, "hang": false})
+
+
+## Triangular headsail from the bow up toward the foremast, sheeted to leeward.
+func _add_jib(tack: Vector3, length: float, h: float, sail_mat: Material) -> void:
+	var pivot := Node3D.new()
+	pivot.position = tack
+	add_child(pivot)
+	_jibs.append(pivot)
+
+	var sail := MeshInstance3D.new()
+	var tri := PrismMesh.new()
+	tri.size = Vector3(length, h, 0.05)
+	tri.left_to_right = 0.0  # right angle at the front: the luff runs up the forestay
+	sail.mesh = tri
+	sail.material_override = sail_mat
+	sail.rotation_degrees.y = -90.0  # lay the triangle along the ship (+X -> aft)
+	sail.position.z = length * 0.5
+	pivot.add_child(sail)
+	_canvas.append({"node": sail, "height": h, "base": 0.0, "hang": false})
 
 
 func _build_wake() -> void:
 	_wake = CPUParticles3D.new()
-	_wake.position = Vector3(0.0, -0.2, 6.5)
+	_wake.position = Vector3(0.0, -0.2 * _vscale, 0.41 * _len)
 	_wake.amount = 120
 	_wake.lifetime = 4.0
 	_wake.local_coords = false
 	_wake.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
-	_wake.emission_box_extents = Vector3(1.5, 0.1, 0.5)
+	_wake.emission_box_extents = Vector3(0.33 * _beam, 0.1, 0.5)
 	_wake.direction = Vector3.UP
 	_wake.spread = 30.0
 	_wake.initial_velocity_min = 0.2
 	_wake.initial_velocity_max = 0.8
 	_wake.gravity = Vector3.ZERO
-	_wake.scale_amount_min = 1.0
-	_wake.scale_amount_max = 2.5
+	_wake.scale_amount_min = 1.0 * _beam / BASE_BEAM
+	_wake.scale_amount_max = 2.5 * _beam / BASE_BEAM
 	_wake.mesh = Fx.particle_quad()
 
 	var ramp := Gradient.new()

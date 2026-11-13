@@ -6,6 +6,7 @@ class_name Hud
 var ship: Ship
 var controller: PlayerController
 var camera_rig: CameraRig
+var fleet: Fleet
 var main: Node  ## main.gd, for the score
 
 const TEXT := Color(1.0, 0.97, 0.9)
@@ -15,6 +16,7 @@ const PANEL := Color(0.05, 0.07, 0.1, 0.55)
 const WIND_COL := Color(0.55, 0.8, 1.0)
 const HEADING_COL := Color(1.0, 0.75, 0.3)
 const ENEMY_COL := Color(1.0, 0.35, 0.3)
+const FLEET_COL := Color(0.55, 0.95, 0.6)
 const HULL_COL := Color(0.85, 0.55, 0.3)
 const SAIL_COL := Color(0.92, 0.9, 0.82)
 const CREW_COL := Color(0.5, 0.85, 0.55)
@@ -46,6 +48,15 @@ func _draw() -> void:
 
 
 func _enemies() -> Array[Ship]:
+	var out: Array[Ship] = []
+	for n in get_tree().get_nodes_in_group("ships"):
+		var s := n as Ship
+		if s != ship and not s.is_sunk and ship.is_hostile_to(s):
+			out.append(s)
+	return out
+
+
+func _others() -> Array[Ship]:
 	var out: Array[Ship] = []
 	for n in get_tree().get_nodes_in_group("ships"):
 		var s := n as Ship
@@ -87,6 +98,13 @@ func _draw_readouts(font: Font) -> void:
 	]
 	if main:
 		lines.append("Ships sunk: %d" % main.get("ships_sunk"))
+	if fleet:
+		var mode := "in battle" if fleet.engaged else ("together" if fleet.keep_together else "breaking away")
+		var pace := "  (fleet pace %d%%)" % roundi(fleet.pace * 100.0) if fleet.pace < 0.99 else ""
+		lines.append("Fleet %d/%d: %s%s" % [fleet.size(), Fleet.MAX_SHIPS, mode, pace])
+		for e in fleet.escorts:
+			var d := e.global_position.distance_to(ship.global_position)
+			lines.append("   %s  hull %d%%  %d m  -  %s" % [e.spec.display_name, roundi(e.hull_frac() * 100.0), roundi(d), e.status_text])
 	var y := 36.0
 	for l in lines:
 		_text(font, Vector2(24.0, y), l, 18)
@@ -122,7 +140,7 @@ func _draw_status(font: Font) -> void:
 		_text(font, Vector2(ax, y + 132.0), s, 15, READY_COL if i == ammo else DIM)
 		ax += font.get_string_size(s, HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x + 18.0
 
-	var help := "A/D steer   W/S sails   Left click fire broadside (side facing cursor)   1/2/3 ammo   Q/E or right-drag rotate   wheel zoom   C cruise view   F11   Esc quit"
+	var help := "A/D steer   W/S sails   Left click fire broadside (side facing cursor)   1/2/3 ammo   Q/E or right-drag rotate   wheel zoom   C cruise view   F fleet together/break away   N add escort (debug)   F11   Esc quit"
 	_text(font, Vector2(24.0, size.y - 18.0), help, 13, DIM)
 
 
@@ -131,15 +149,19 @@ func _draw_enemy_labels(font: Font) -> void:
 	var cam := get_viewport().get_camera_3d()
 	if cam == null:
 		return
-	for e in _enemies():
-		var top := e.global_position + Vector3.UP * 17.0
+	for e in _others():
+		var friend := not ship.is_hostile_to(e)
+		var top := e.global_position + Vector3.UP * (e.length() * 0.9 + 3.0)
 		if cam.is_position_behind(top):
 			continue
 		var p := cam.unproject_position(top)
 		var dist := (e.global_position - ship.global_position).length()
 		var w := 70.0
 		var x := p.x - w * 0.5
-		_text(font, Vector2(x, p.y - 8.0), "Enemy  %d m" % roundi(dist), 13, ENEMY_COL)
+		var label := "%s  %d m" % [e.spec.display_name, roundi(dist)]
+		if friend and e.status_text.begins_with("engaging"):
+			label += "  (engaging)"
+		_text(font, Vector2(x, p.y - 8.0), label, 13, FLEET_COL if friend else ENEMY_COL)
 		_bar(Rect2(x, p.y, w, 5.0), e.hull_frac(), HULL_COL)
 		_bar(Rect2(x, p.y + 7.0, w, 5.0), e.sails_frac(), SAIL_COL)
 		_bar(Rect2(x, p.y + 14.0, w, 5.0), e.crew_frac(), CREW_COL)

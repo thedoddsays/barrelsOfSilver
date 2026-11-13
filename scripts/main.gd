@@ -4,16 +4,21 @@ extends Node3D
 
 const ISLAND_SEED := 1715
 const ENEMY_RESPAWN_DELAY := 10.0
+const ENEMY_FACTION := 1
+## Debug: N adds an escort to the fleet, cycling through these (until capture exists).
+const DEBUG_ESCORTS := ["sloop", "brigantine", "pirate_frigate"]
 
 var ocean: Ocean
 var environment: Environment
 var sun: DirectionalLight3D
 var player: Ship
+var fleet: Fleet
 var hud: Hud
 var ships_sunk := 0
 var island_count := 14  ## raised by the stress test
 
 var _islands: Array[Vector3] = []  ## (x, z, radius) of each island
+var _debug_escort_index := 0
 
 
 func _ready() -> void:
@@ -31,6 +36,11 @@ func _ready() -> void:
 	var start_heading := wrapf(Wind.angle - deg_to_rad(40.0), 0.0, TAU)
 	player.rotation.y = -start_heading
 	add_child(player)
+
+	fleet = Fleet.new()
+	fleet.flagship = player
+	add_child(fleet)
+	fleet.watch_flagship()
 
 	var controller := PlayerController.new()
 	controller.ship = player
@@ -54,6 +64,7 @@ func _ready() -> void:
 	hud.controller = controller
 	hud.camera_rig = rig
 	hud.main = self
+	hud.fleet = fleet
 	layer.add_child(hud)
 
 	_spawn_enemy()
@@ -67,6 +78,42 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_tree().quit()
 	elif event.is_action_pressed("restart") and player.is_sunk:
 		get_tree().reload_current_scene()
+	elif event.is_action_pressed("fleet_together"):
+		fleet.keep_together = not fleet.keep_together
+	elif event.is_action_pressed("debug_add_escort"):
+		_debug_add_escort()
+
+
+## Debug stand-in for capturing: spawn an escort astern of the flagship and add it to
+## the fleet. Cycles sloop -> brigantine -> frigate.
+func _debug_add_escort() -> void:
+	if fleet.is_full() or player.is_sunk:
+		return
+	var id: String = DEBUG_ESCORTS[_debug_escort_index % DEBUG_ESCORTS.size()]
+	_debug_escort_index += 1
+	var h := player.heading_bearing()
+	var fwd := Vector3(sin(h), 0.0, -cos(h))
+	var right := Vector3(cos(h), 0.0, sin(h))
+	var pos := player.global_position - fwd * 70.0 + right * randf_range(-40.0, 40.0)
+	for attempt in 20:
+		if _clear_of_islands(pos, 30.0):
+			break
+		pos = player.global_position - fwd * randf_range(60.0, 140.0) + right * randf_range(-80.0, 80.0)
+	var s := Ship.new()
+	s.ocean = ocean
+	s.spec = load("res://data/ships/%s.tres" % id)
+	s.hull_color = player.hull_color.lerp(Color(0.4, 0.3, 0.2), 0.3)
+	s.flag_color = player.flag_color
+	s.position = Vector3(pos.x, 0.5, pos.z)
+	s.rotation.y = player.rotation.y
+	add_child(s)
+	s.linear_velocity = player.linear_velocity
+	fleet.add_escort(s)
+	# Start her on her formation station if that's open water, so escorts never spawn
+	# on top of each other.
+	var station := fleet.station_position(s)
+	if _clear_of_islands(station, 30.0):
+		s.global_position = Vector3(station.x, 0.5, station.z)
 
 
 ## Place an enemy 260-360 m away in clear water, pointed roughly at the player.
@@ -83,25 +130,39 @@ func _spawn_enemy() -> void:
 
 	var enemy := Ship.new()
 	enemy.ocean = ocean
-	enemy.max_crew = 50.0
+	enemy.spec = _random_enemy_spec()
 	enemy.hull_color = Color(0.17, 0.13, 0.11)
 	enemy.sail_color = Color(0.78, 0.74, 0.66)
 	enemy.flag_color = Color(0.7, 0.1, 0.08)
 	enemy.position = pos
+	enemy.faction = ENEMY_FACTION
 	var to_player := player.global_position - pos
 	enemy.rotation.y = -atan2(to_player.x, -to_player.z)
 	add_child(enemy)
 	enemy.sank.connect(_on_enemy_sank)
 
+	# Hunts the nearest ship of the player's fleet, starting with the player.
 	var captain := AiCaptain.new()
 	captain.ship = enemy
 	captain.target = player
+	captain.auto_target = true
 	add_child(captain)
 
 
 func _on_enemy_sank() -> void:
 	ships_sunk += 1
 	get_tree().create_timer(ENEMY_RESPAWN_DELAY).timeout.connect(_spawn_enemy)
+
+
+## Prototype stand-in for the roster's rarity system: mostly sloops, some brigantines,
+## the occasional frigate.
+func _random_enemy_spec() -> ShipSpec:
+	var r := randf()
+	if r < 0.5:
+		return load("res://data/ships/sloop.tres")
+	if r < 0.85:
+		return load("res://data/ships/brigantine.tres")
+	return load("res://data/ships/pirate_frigate.tres")
 
 
 func _clear_of_islands(p: Vector3, margin: float) -> bool:
@@ -120,6 +181,8 @@ func _setup_input() -> void:
 	_bind("cam_right", [KEY_E])
 	_bind("toggle_fullscreen", [KEY_F11])
 	_bind("quit", [KEY_ESCAPE])
+	_bind("fleet_together", [KEY_F])
+	_bind("debug_add_escort", [KEY_N])
 	_bind("ammo_round", [KEY_1])
 	_bind("ammo_chain", [KEY_2])
 	_bind("ammo_grape", [KEY_3])

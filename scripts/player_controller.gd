@@ -88,7 +88,7 @@ func _update_aim_side() -> void:
 		aim_side = -aim_side
 
 
-## One ballistic arc per gun out to where the ball lands, joined across the ends.
+## Ballistic arcs out to where the balls land (up to six guns, bow to stern), joined across the ends.
 ## Bright when that side is loaded, dim red while reloading.
 func _draw_arcs() -> void:
 	var loaded := ship.can_fire(aim_side)
@@ -101,7 +101,7 @@ func _draw_arcs() -> void:
 	var starts: Array[Vector3] = []
 	var ends: Array[Vector3] = []
 	_arcs.surface_begin(Mesh.PRIMITIVE_LINES)
-	for g in Ship.GUN_Z.size():
+	for g in ship.aim_guns(6):
 		var p := ship.gun_position(aim_side, g)
 		starts.append(p)
 		var v := ship.shot_velocity(aim_side, ammo)

@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="ShipSpec" format=3]
+
+[ext_resource type="Script" path="res://scripts/ship_spec.gd" id="1_spec"]
+
+[resource]
+script = ExtResource("1_spec")
+id = "sloop"
+display_name = "Sloop"
+tier = "light"
+rarity = "common"
+length = 16.0
+beam = 4.6
+hull_height = 2.2
+mass_t = 20.0
+max_hull = 100.0
+draft = "shallow"
+rig = 0
+speed_mult = 1.0
+turn_mult = 1.0
+max_crew = 80.0
+guns_per_side = 5
+gun_decks = 1
+cargo_t = 40.0
+masts = PackedStringArray("gaff")
+mast_height_frac = 0.8
+jib = true

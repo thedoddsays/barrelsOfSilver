@@ -8,6 +8,7 @@ const MAX_LIFETIME := 8.0
 
 var velocity := Vector3.ZERO
 var shooter: Ship
+var shooter_faction := -1  ## balls pass through ships on the shooter's side (no friendly fire)
 var ammo := 0
 var ocean: Ocean
 
@@ -61,7 +62,7 @@ func _physics_process(delta: float) -> void:
 	var mid := (from + to) * 0.5
 	for node in get_tree().get_nodes_in_group("ships"):
 		var s := node as Ship
-		if s == shooter or s.is_sunk:
+		if s == shooter or s.is_sunk or s.faction == shooter_faction:
 			continue
 		if s.contains_point(mid) or s.contains_point(to):
 			s.take_hit(ammo, to, velocity)

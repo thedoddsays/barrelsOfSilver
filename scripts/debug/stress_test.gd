@@ -109,6 +109,8 @@ func _add_pair() -> void:
 	var offset := Vector3(sin(b_angle), 0.0, -cos(b_angle)) * 120.0
 	var a := _spawn_stress_ship(pos - offset * 0.5, offset)
 	var b := _spawn_stress_ship(pos + offset * 0.5, -offset)
+	a.faction = 1  # opposing sides, so their shots hit each other (no friendly fire)
+	b.faction = 2
 	_add_captain(a, b)
 	_add_captain(b, a)
 	_pairs.append([a, b])
@@ -117,14 +119,17 @@ func _add_pair() -> void:
 func _spawn_stress_ship(pos: Vector3, facing: Vector3) -> Ship:
 	var s := Ship.new()
 	s.ocean = ocean
-	s.max_hull = 1.0e6  # unsinkable, so the load stays constant
-	s.max_crew = 5000.0  # crew losses never slow the guns
 	s.hull_color = Color.from_hsv(randf(), 0.4, 0.35)
 	s.sail_color = Color(0.85, 0.82, 0.74)
 	s.flag_color = Color.from_hsv(randf(), 0.8, 0.7)
 	s.position = Vector3(pos.x, 0.5, pos.z)
 	s.rotation.y = atan2(-facing.x, -facing.z)
 	add_child(s)
+	# After add_child, because the ship's spec sets its hull and crew in _ready().
+	s.max_hull = 1.0e6  # unsinkable, so the load stays constant
+	s.hull = s.max_hull
+	s.max_crew = 5000.0  # crew losses never slow the guns
+	s.crew = s.max_crew
 	return s
 
 

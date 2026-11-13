@@ -55,13 +55,21 @@ Flag-style ship combat and looks), so systems built here should carry forward.
   blocky/pixelated; summed sines looked like a tiled image (owner, 2026-11-12). Avoid both.
   Integer hash, not sin() hash, so it stays stable at large world coordinates.
 - `ship.gd`: RigidBody3D, 8 buoyancy probes, anisotropic hull drag (keel), wind thrust by
-  point of sail (in irons < 30° with a 25–35% thrust floor head to wind, best on a broad reach), rudder bite scales with speed, heel
+  point of sail (per-rig curve from the spec, all with a thrust floor head to wind), rudder bite scales with speed, heel
   torque, braced yards, furl/unfurl sails (W/S: furled / battle / full), wake particles.
   Uses Pirates!-style "game scale": top speed about 12 m/s; HUD knots × 0.5 so they read
   realistically. Ship visuals are placeholder primitives.
+- **Data-driven ships (2026-11-13):** `ShipSpec` resource (`scripts/ship_spec.gd`), data in `data/ships/*.tres`
+  (sloop, brigantine, pirate_frigate so far, from docs/ship-roster.md). `Ship.spec` (default sloop) sets size,
+  mass, hull, crew, guns (rows per gun deck), rig curve (`RIG_CURVES`: fore-and-aft / mixed / square) and masts
+  ("square" yards or "gaff" boom sails, plus jib). All forces scale from the 16 m / 20 t sloop baseline by mass,
+  inertia and speed_mult, so new ships need no hand-tuning. Set hull/crew overrides AFTER add_child (spec applies
+  in _ready). New class_names need a rescan before headless `--script` runs: `godot --headless --path . --import`.
+  Enemies spawn as a random type (50% sloop, 35% brigantine, 15% frigate). The player's sloop is now a true
+  fore-and-aft sloop: better upwind, a bit slower dead downwind than the old curve.
 - `wind.gd` (autoload `Wind`): `angle` = bearing the wind blows TOWARD; drifts and gusts.
   Compass: bearing 0 = north = -Z, PI/2 = east = +X. Ship heading bearing = `-rotation.y`.
-- `camera_rig.gd`: two blended views. **Map view**: narrow 28° lens (flat 2.5D look), 40–400 m,
+- `camera_rig.gd`: two blended views. **Map view**: narrow 28° lens (flat 2.5D look), 40–650 m,
   zooming in lowers the pitch (-32°…-68°); Q/E or right-drag rotates. **Cruise view** (C, inspired by
   Black Flag's "just sail" mode): low chase cam behind the ship following its heading, HUD and firing
   arcs fade out, fog thickens to hide the ocean mesh edge (~600 m). Wheel, right-drag, Q/E, click or C
@@ -110,6 +118,25 @@ Flag-style ship combat and looks), so systems built here should carry forward.
   scenes/debug and scripts/debug are excluded from exports. Owner PC (RTX 4060, Ryzen 7 3700X): 20 AI ships
   236 FPS, 40 ships 110, 60 ships 55. Main costs: ~30 draw calls per placeholder ship (many primitives) and
   GDScript buoyancy/AI (~8 ms physics at 60 ships). Real merged models and distant-ship LOD are the levers.
+- **Fleet prototype (2026-11-13):** `scripts/fleet.gd` (`Fleet`, cap 4 incl. flagship) owns the player's escorts.
+  Ships have a `faction` (0 = player's fleet); cannonballs skip the shooter's faction (friendly fire off).
+  Escorts run `AiCaptain` with `fleet` set: follow mode keeps loose stations (`Fleet.station_position`, laid
+  out on a smoothed heading so turns don't whip the formation), never loops back when ahead of station,
+  trims speed with `Ship.thrust_limit`, and brakes/steers around friends (look-ahead: predicted closest
+  approach over 6 s, so heavy ships turn away early; tighter clearance in formation so stations don't
+  fight the avoidance). In battle, escorts circle a shared target in separate range lanes.
+  **Engage on command (owner, 2026-11-13):** escorts ignore every ship until `Fleet.engaged`, which starts
+  when the player fires (`Ship.fired`) or a fleet ship takes cannon/ram damage, and ends after 20 quiet
+  seconds with no enemy within 250 m of the flagship. While engaged they fight enemies within 250 m of the
+  flagship, leashed to 300 m from it (with hysteresis). Escort status shows on the HUD and prints
+  `[fleet] ...` lines to the Output panel. Enemies auto-target the nearest fleet ship. Fleet pace (off while
+  engaged): flagship thrust capped to 80% of the slowest escort's
+  progress on its heading (`potential_progress`, which counts tacking for rigs that can't point as high),
+  and drops further (to 35%) while any escort is >20 m behind her station ("the fleet waits"); off during
+  battle or with F ("break away"). N = debug add escort (stand-in for capture). Owner playtest 1
+  (2026-11-13): escorts dropped out of view → tighter stations (rank 1 ≈ 35–45 m back, rear ≈ 65 m),
+  the fleet-waits rule, and map zoom out to 650 m (tilt unchanged up to 400 m, haze held constant beyond).
+  Headless: station error ~8–12 m (sloop/brigantine), ~15–19 m (frigate); 2 slow friendly bumps in 11 battles.
   - Godot on the dev box: `C:\Users\Stephen\Documents\Tools\Godot\Godot_v4.7.2-stable_win64.exe\` is a
     *folder*; the console exe is inside it.
 

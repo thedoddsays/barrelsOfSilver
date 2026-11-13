@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="ShipSpec" format=3]
+
+[ext_resource type="Script" path="res://scripts/ship_spec.gd" id="1_spec"]
+
+[resource]
+script = ExtResource("1_spec")
+id = "pirate_frigate"
+display_name = "Pirate frigate"
+tier = "heavy"
+rarity = "uncommon"
+length = 32.0
+beam = 8.5
+hull_height = 3.8
+mass_t = 128.0
+max_hull = 300.0
+draft = "deep"
+rig = 2
+speed_mult = 0.9
+turn_mult = 0.65
+max_crew = 220.0
+guns_per_side = 16
+gun_decks = 1
+cargo_t = 160.0
+masts = PackedStringArray("square", "square", "gaff")
+mast_height_frac = 0.8
+jib = true
