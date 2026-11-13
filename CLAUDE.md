@@ -30,6 +30,9 @@ Flag-style ship combat and looks), so systems built here should carry forward.
   VFX, then islands.
 
 ## Design docs
+- `docs/gdd.md`: the game design document (skeleton v0, 2026-11-13). Follows the owner's 5-step
+  process: vision, tools and why, proof of concept with a "what we tried" decision log, world,
+  gameplay loop, systems. **Keep its decision log current** whenever an approach is replaced.
 - `docs/ship-roster.md`: 20 ship types, stats, rig profiles, rarity, fleet, art scope (v3,
   owner decisions made 2026-11-12: sloop start, fleet of 3–4, all tiers in release 1).
 - `docs/famous-pirates.md`: historical pirates and their unique ships at real sizes (draft v1).
