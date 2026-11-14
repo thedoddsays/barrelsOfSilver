@@ -784,7 +784,8 @@ func _build_model() -> Dictionary:
 		if foot == null:
 			break
 		var head: Variant = marker.call("mast_%d_head" % m)
-		var top: Vector3 = foot + Vector3.UP * spec.mast_height_frac * _len
+		var top_m: Variant = marker.call("mast_%d_top" % m)
+		var top: Vector3 = top_m if top_m != null else foot + Vector3.UP * spec.mast_height_frac * _len
 		rig["masts"].append({"foot": foot, "head": head if head != null else top, "top": top,
 			"kind": spec.masts[m], "mesh": false})
 	var flag: Variant = marker.call("flag")
@@ -865,13 +866,21 @@ func _build_placeholder() -> Dictionary:
 
 ## Sails and running spars on the rig layout, plus the colours at the masthead.
 func _build_rig(rig: Dictionary, spar: Material, canvas: Material) -> void:
-	for m: Dictionary in rig["masts"]:
+	var masts: Array = rig["masts"]
+	for i in masts.size():
+		var m: Dictionary = masts[i]
 		var foot: Vector3 = m["foot"]
 		var top: Vector3 = m["top"]
 		var mh := top.y - foot.y
-		if m["kind"] == "gaff":
-			# Fore-and-aft sail aft of the mast, as long as the deck allows.
+		if m["kind"] == "gaff" or m["kind"] == "spanker":
+			# Fore-and-aft sail aft of the mast, as long as the deck allows and clear of the
+			# next mast aft (schooner foresail, ketch mainsail). A "spanker" mizzen (full-rigged
+			# ship) also sets a square topsail above it.
+			if m["kind"] == "spanker":
+				_add_square_sail(foot + Vector3.UP * 0.795 * mh, 0.29 * mh, 0.23 * mh, spar, canvas)
 			var sail_len := minf(0.42 * _len, 0.4 * _len - foot.z)
+			if i + 1 < masts.size():
+				sail_len = minf(sail_len, (masts[i + 1]["foot"] as Vector3).z - foot.z - 0.6 * _vscale)
 			var boom_h := 1.5 * _vscale
 			var throat := (m["head"] as Vector3).y - foot.y
 			_add_gaff_sail(foot, sail_len, throat - boom_h, boom_h, spar, canvas)
@@ -888,7 +897,8 @@ func _build_rig(rig: Dictionary, spar: Material, canvas: Material) -> void:
 	# Colours at the masthead
 	var flag := _mat(flag_color, 0.9)
 	var fs := maxf(_vscale, 1.0)
-	_add_box(Vector3(1.2, 0.8, 0.03) * fs, (rig["flag"] as Vector3) + Vector3(0.65, -0.45, 0.0) * fs, flag)
+	var flag_mi := _add_box(Vector3(1.2, 0.8, 0.03) * fs, (rig["flag"] as Vector3) + Vector3(0.65, -0.45, 0.0) * fs, flag)
+	flag_mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 
 ## Square sail hanging from a yard that braces round to the wind; bellies forward.
@@ -995,6 +1005,9 @@ func _add_spar(parent: Node3D, a: Vector3, b: Vector3, radius: float, m: Materia
 	c.rings = 1
 	mi.mesh = c
 	mi.material_override = m
+	# Thin spars' shadows barely show from the map camera; skipping them saves a shadow-pass
+	# draw call per spar (stress test).
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var y := (b - a).normalized()
 	var x := y.cross(Vector3.FORWARD if absf(y.dot(Vector3.FORWARD)) < 0.9 else Vector3.RIGHT).normalized()
 	mi.transform = Transform3D(Basis(x, y, x.cross(y)), (a + b) * 0.5)

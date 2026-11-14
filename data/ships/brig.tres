@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="ShipSpec" format=3]
+
+[ext_resource type="Script" path="res://scripts/ship_spec.gd" id="1_spec"]
+[ext_resource type="PackedScene" path="res://assets/ships/brig/brig.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_spec")
+id = "brig"
+display_name = "Brig"
+tier = "medium"
+rarity = "uncommon"
+length = 24.0
+beam = 6.6
+hull_height = 3.0
+mass_t = 58.0
+max_hull = 140.0
+draft = "medium"
+rig = 2
+speed_mult = 0.98
+turn_mult = 0.85
+max_crew = 100.0
+guns_per_side = 8
+gun_decks = 1
+cargo_t = 90.0
+masts = PackedStringArray("square", "square")
+mast_height_frac = 0.8
+jib = true
+model = ExtResource("2_model")

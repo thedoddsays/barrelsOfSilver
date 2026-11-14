@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="ShipSpec" format=3]
+
+[ext_resource type="Script" path="res://scripts/ship_spec.gd" id="1_spec"]
+[ext_resource type="PackedScene" path="res://assets/ships/ketch/ketch.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_spec")
+id = "ketch"
+display_name = "Ketch"
+tier = "light"
+rarity = "common"
+length = 18.0
+beam = 5.4
+hull_height = 2.5
+mass_t = 30.0
+max_hull = 90.0
+draft = "shallow"
+rig = 0
+speed_mult = 0.92
+turn_mult = 0.95
+max_crew = 50.0
+guns_per_side = 4
+gun_decks = 1
+cargo_t = 80.0
+masts = PackedStringArray("gaff", "gaff")
+mast_height_frac = 0.78
+jib = true
+model = ExtResource("2_model")

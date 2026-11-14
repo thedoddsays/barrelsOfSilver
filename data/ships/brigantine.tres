@@ -1,6 +1,7 @@
 [gd_resource type="Resource" script_class="ShipSpec" format=3]
 
 [ext_resource type="Script" path="res://scripts/ship_spec.gd" id="1_spec"]
+[ext_resource type="PackedScene" path="res://assets/ships/brigantine/brigantine.glb" id="2_model"]
 
 [resource]
 script = ExtResource("1_spec")
@@ -24,3 +25,4 @@ cargo_t = 100.0
 masts = PackedStringArray("square", "gaff")
 mast_height_frac = 0.78
 jib = true
+model = ExtResource("2_model")

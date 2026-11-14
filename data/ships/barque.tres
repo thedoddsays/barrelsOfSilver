@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="ShipSpec" format=3]
+
+[ext_resource type="Script" path="res://scripts/ship_spec.gd" id="1_spec"]
+[ext_resource type="PackedScene" path="res://assets/ships/barque/barque.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_spec")
+id = "barque"
+display_name = "Barque"
+tier = "merchant"
+rarity = "uncommon"
+length = 30.0
+beam = 8.0
+hull_height = 3.5
+mass_t = 104.0
+max_hull = 170.0
+draft = "medium"
+rig = 1
+speed_mult = 0.85
+turn_mult = 0.7
+max_crew = 50.0
+guns_per_side = 6
+gun_decks = 1
+cargo_t = 280.0
+masts = PackedStringArray("square", "square", "gaff")
+mast_height_frac = 0.78
+jib = true
+model = ExtResource("2_model")

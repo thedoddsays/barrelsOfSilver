@@ -6,7 +6,8 @@ const ISLAND_SEED := 1715
 const ENEMY_RESPAWN_DELAY := 10.0
 const ENEMY_FACTION := 1
 ## Debug: N adds an escort to the fleet, cycling through these (until capture exists).
-const DEBUG_ESCORTS := ["sloop", "brigantine", "pirate_frigate"]
+const DEBUG_ESCORTS := ["sloop", "brigantine", "pirate_frigate", "ketch", "schooner", "brig", "snow",
+		"barque", "merchantman", "east_indiaman"]
 
 var ocean: Ocean
 var environment: Environment

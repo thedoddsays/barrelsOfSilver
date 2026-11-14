@@ -38,8 +38,9 @@ enum Rig { FORE_AND_AFT, MIXED, SQUARE, OARED }
 ## rigging plus marker nodes (mast_N, mast_N_head, jib_tack, jib_head, flag, gun_N) that
 ## Ship hangs the animated sails on. Without one, Ship builds placeholder geometry.
 @export var model: PackedScene
-## One entry per mast, bow to stern: "square" (yards and square sails) or "gaff"
-## (a fore-and-aft sail on a boom that swings to leeward).
+## One entry per mast, bow to stern: "square" (yards and square sails), "gaff" (a
+## fore-and-aft sail on a boom that swings to leeward) or "spanker" (a full-rigged ship's
+## mizzen: a gaff sail with a square topsail above it).
 @export var masts: PackedStringArray = PackedStringArray(["gaff"])
 @export var mast_height_frac := 0.8  ## tallest mast height as a fraction of length
 @export var jib := true  ## triangular headsail from the foremast to the bowsprit

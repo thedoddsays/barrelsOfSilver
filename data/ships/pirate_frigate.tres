@@ -1,6 +1,7 @@
 [gd_resource type="Resource" script_class="ShipSpec" format=3]
 
 [ext_resource type="Script" path="res://scripts/ship_spec.gd" id="1_spec"]
+[ext_resource type="PackedScene" path="res://assets/ships/pirate_frigate/pirate_frigate.glb" id="2_model"]
 
 [resource]
 script = ExtResource("1_spec")
@@ -21,6 +22,7 @@ max_crew = 220.0
 guns_per_side = 16
 gun_decks = 1
 cargo_t = 160.0
-masts = PackedStringArray("square", "square", "gaff")
+masts = PackedStringArray("square", "square", "spanker")
 mast_height_frac = 0.8
 jib = true
+model = ExtResource("2_model")

@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="ShipSpec" format=3]
+
+[ext_resource type="Script" path="res://scripts/ship_spec.gd" id="1_spec"]
+[ext_resource type="PackedScene" path="res://assets/ships/east_indiaman/east_indiaman.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_spec")
+id = "east_indiaman"
+display_name = "East Indiaman"
+tier = "merchant"
+rarity = "rare"
+length = 40.0
+beam = 10.5
+hull_height = 4.6
+mass_t = 238.0
+max_hull = 350.0
+draft = "deep"
+rig = 2
+speed_mult = 0.75
+turn_mult = 0.5
+max_crew = 140.0
+guns_per_side = 16
+gun_decks = 1
+cargo_t = 450.0
+masts = PackedStringArray("square", "square", "spanker")
+mast_height_frac = 0.78
+jib = true
+model = ExtResource("2_model")

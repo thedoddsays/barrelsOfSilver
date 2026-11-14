@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="ShipSpec" format=3]
+
+[ext_resource type="Script" path="res://scripts/ship_spec.gd" id="1_spec"]
+[ext_resource type="PackedScene" path="res://assets/ships/schooner/schooner.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_spec")
+id = "schooner"
+display_name = "Schooner"
+tier = "light"
+rarity = "rare"
+length = 20.0
+beam = 5.2
+hull_height = 2.4
+mass_t = 31.0
+max_hull = 90.0
+draft = "shallow"
+rig = 0
+speed_mult = 1.05
+turn_mult = 0.95
+max_crew = 70.0
+guns_per_side = 5
+gun_decks = 1
+cargo_t = 60.0
+masts = PackedStringArray("gaff", "gaff")
+mast_height_frac = 0.85
+jib = true
+model = ExtResource("2_model")

@@ -19,6 +19,10 @@ const BENCH_SHIPS := [0, 10, 20, 30, 40, 60]  ## AI ships per step (always even)
 const BENCH_SETTLE := 4.0
 const BENCH_MEASURE := 10.0
 const BENCH_ZOOM := 300.0  ## camera distance during the benchmark, so the fight is on screen
+## Stress ships are a random mix of every modelled ship type, weighted roughly like a real
+## sea (lots of small ships, a few big ones). Launch with `-- --sloops` for sloops only.
+const STRESS_MIX := {"sloop": 4, "ketch": 2, "schooner": 1, "brigantine": 3, "brig": 2, "snow": 1,
+	"barque": 1, "merchantman": 2, "pirate_frigate": 1, "east_indiaman": 1}
 
 var _pairs: Array = []  ## [ship_a, ship_b] per pair
 var _rig: CameraRig
@@ -36,6 +40,8 @@ var _bench_samples := 0
 var _bench_max_balls := 0
 var _bench_rows: Array[String] = []
 var _quit_after_bench := false
+var _sloops_only := false
+var _specs := {}  ## id -> ShipSpec
 
 
 func _ready() -> void:
@@ -51,6 +57,7 @@ func _ready() -> void:
 	_build_overlay()
 	var args := OS.get_cmdline_user_args()
 	_quit_after_bench = "--quit" in args
+	_sloops_only = "--sloops" in args
 	if "--bench" in args:
 		_start_bench.call_deferred()
 
@@ -119,6 +126,7 @@ func _add_pair() -> void:
 func _spawn_stress_ship(pos: Vector3, facing: Vector3) -> Ship:
 	var s := Ship.new()
 	s.ocean = ocean
+	s.spec = _random_spec()
 	s.hull_color = Color.from_hsv(randf(), 0.4, 0.35)
 	s.sail_color = Color(0.85, 0.82, 0.74)
 	s.flag_color = Color.from_hsv(randf(), 0.8, 0.7)
@@ -131,6 +139,23 @@ func _spawn_stress_ship(pos: Vector3, facing: Vector3) -> Ship:
 	s.max_crew = 5000.0  # crew losses never slow the guns
 	s.crew = s.max_crew
 	return s
+
+
+func _random_spec() -> ShipSpec:
+	var id := "sloop"
+	if not _sloops_only:
+		var total := 0
+		for k in STRESS_MIX:
+			total += int(STRESS_MIX[k])
+		var r := randi() % total
+		for k in STRESS_MIX:
+			r -= int(STRESS_MIX[k])
+			if r < 0:
+				id = k
+				break
+	if not _specs.has(id):
+		_specs[id] = load("res://data/ships/%s.tres" % id)
+	return _specs[id]
 
 
 func _add_captain(ship: Ship, target: Ship) -> void:
@@ -216,6 +241,7 @@ func _finish_bench() -> void:
 			OS.get_name(), RenderingServer.get_current_rendering_driver_name()],
 		"Window: %s, %d islands, vsync off, camera at %d m" % [str(get_viewport().get_visible_rect().size),
 			STRESS_ISLANDS, int(BENCH_ZOOM)],
+		"Ships: %s" % ("sloops only" if _sloops_only else "random mix of all modelled types (STRESS_MIX)"),
 		"",
 		"| AI ships | avg FPS | 1% low FPS | process ms | physics ms | draw calls | max balls |",
 		"|---|---|---|---|---|---|---|",

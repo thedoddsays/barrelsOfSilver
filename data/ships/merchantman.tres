@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="ShipSpec" format=3]
+
+[ext_resource type="Script" path="res://scripts/ship_spec.gd" id="1_spec"]
+[ext_resource type="PackedScene" path="res://assets/ships/merchantman/merchantman.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_spec")
+id = "merchantman"
+display_name = "Merchantman"
+tier = "merchant"
+rarity = "common"
+length = 30.0
+beam = 8.0
+hull_height = 3.6
+mass_t = 107.0
+max_hull = 180.0
+draft = "deep"
+rig = 2
+speed_mult = 0.85
+turn_mult = 0.7
+max_crew = 60.0
+guns_per_side = 8
+gun_decks = 1
+cargo_t = 220.0
+masts = PackedStringArray("square", "square", "spanker")
+mast_height_frac = 0.8
+jib = true
+model = ExtResource("2_model")

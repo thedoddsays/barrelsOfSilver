@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="ShipSpec" format=3]
+
+[ext_resource type="Script" path="res://scripts/ship_spec.gd" id="1_spec"]
+[ext_resource type="PackedScene" path="res://assets/ships/snow/snow.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_spec")
+id = "snow"
+display_name = "Snow"
+tier = "medium"
+rarity = "uncommon"
+length = 26.0
+beam = 7.0
+hull_height = 3.1
+mass_t = 70.0
+max_hull = 150.0
+draft = "medium"
+rig = 2
+speed_mult = 0.96
+turn_mult = 0.83
+max_crew = 100.0
+guns_per_side = 8
+gun_decks = 1
+cargo_t = 120.0
+masts = PackedStringArray("square", "square", "gaff")
+mast_height_frac = 0.8
+jib = true
+model = ExtResource("2_model")
