@@ -29,10 +29,7 @@ func _ready() -> void:
 
 
 func _process(_delta: float) -> void:
-	# Hidden in cruise view, except on game over.
-	var fade := 1.0 - camera_rig.cruise_blend if camera_rig else 1.0
-	modulate.a = 1.0 if ship and ship.is_sunk else fade
-	queue_redraw()
+	queue_redraw()  # shown in both views (chase view is fully playable)
 
 
 func _draw() -> void:
@@ -140,7 +137,7 @@ func _draw_status(font: Font) -> void:
 		_text(font, Vector2(ax, y + 132.0), s, 15, READY_COL if i == ammo else DIM)
 		ax += font.get_string_size(s, HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x + 18.0
 
-	var help := "A/D steer   W/S sails   Left click fire broadside (side facing cursor)   1/2/3 ammo   Q/E or right-drag rotate   wheel zoom   C cruise view   F fleet together/break away   N add escort (debug)   F11   Esc quit"
+	var help := "A/D steer   W/S sails   Left click fire broadside (side facing cursor)   1/2/3 ammo   Q/E or right-drag rotate   wheel zoom   C chase view   F fleet together/break away   N add escort (debug)   F11   Esc quit"
 	_text(font, Vector2(24.0, size.y - 18.0), help, 13, DIM)
 
 

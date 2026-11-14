@@ -77,11 +77,16 @@ Flag-style ship combat and looks), so systems built here should carry forward.
 - `wind.gd` (autoload `Wind`): `angle` = bearing the wind blows TOWARD; drifts and gusts.
   Compass: bearing 0 = north = -Z, PI/2 = east = +X. Ship heading bearing = `-rotation.y`.
 - `camera_rig.gd`: two blended views. **Map view**: narrow 28° lens (flat 2.5D look), 40–650 m,
-  zooming in lowers the pitch (-32°…-68°); Q/E or right-drag rotates. **Cruise view** (C, inspired by
-  Black Flag's "just sail" mode): low chase cam behind the ship following its heading, HUD and firing
-  arcs fade out, fog thickens to hide the ocean mesh edge (~600 m). Wheel, right-drag, Q/E, click or C
-  returns to map view (a click there doesn't fire). Cruise distance/height scale with the ship
-  ((L/16)^0.65, (H/2.2)^0.65; cruise fog thins by the square root of that) so big ships' sterns don't fill the view. Rig drives fog density and sun shadow distance.
+  pitch one steady arc, -65° at 40 m to -45° at 650 m, even per wheel notch (log distance): zooming out
+  swings the camera toward the bottom of the screen to show what's ahead (owner, 2026-11-14; was -32°…-68°,
+  shallow when zoomed in); owner approved the arc and the playable chase view the same day. Q/E or right-drag rotates. Map view is the default (fleets).
+  **Chase view** (C; "cruise" in code, inspired by Black Flag): low cam behind the ship following its
+  heading, fog thickened to hide the ocean mesh edge (~600 m). **Fully playable since 2026-11-14 (owner):**
+  HUD and aim arcs stay, clicks fire (cursor above the horizon aims by look direction), wheel zooms
+  0.6–1.5× (beyond that the mesh edge shows), right-drag/Q/E orbit round the ship and ease back astern
+  2.5 s after the last input; only C returns to the map. Chase distance/height scale with the ship
+  ((L/16)^0.65, (H/2.2)^0.65; chase fog thins by the square root of that) so big ships' sterns don't fill
+  the view. Rig drives fog density and sun shadow distance.
   `cruise_changed` signal is the hook for crew-shanty music: needs original/licensed recordings.
   Owner loved both views on first try (2026-11-12): treat the current camera values as the baseline.
 - `hud.gd`: compass (wind and heading arrows), speed, sails, point of sail, controls.

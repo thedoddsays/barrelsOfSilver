@@ -64,7 +64,8 @@ Decided (owner, 2026-11-12):
   shapes, a cohesive palette and readable silhouettes. Warm and adventurous. Consistency beats
   raw fidelity.
 - **High top-down "2.5D" camera.** The map reads like a map and ships read like miniatures.
-  A low "cruise" view behind the ship is for just sailing.
+  Map view is the default, especially for fleets. A low chase view behind the ship (C) is a
+  fully playable option for single-ship play (owner, 2026-11-14).
 - Visual priority: water, then lighting and post-processing, then ship models and sails, then
   effects, then islands.
 
@@ -186,6 +187,7 @@ publishing anything.
 | Open boats | Floorboards near the keel | The ocean is one opaque surface, so water showed right through the inside of the boat (owner) | Floorboards a quarter of the hull depth above the waterline | 2026-11-14 |
 | Hull vs. waves | Nothing stopped crests drawing inside a hull | Owner saw water clipping through ships in waves | Ocean shader skips water inside each afloat hull's outline above her deck (hull mask) | 2026-11-14 |
 | Heeling | Wind heel torque scaled with the hull's roll inertia, mass × (beam² + height²) | The buoyancy probes' righting moment only grows with mass × beam² ÷ height scale, so tall hulls were overpowered: the galleon and every rate capsized, the East Indiaman heeled 22° | Heel torque capped at what the hull can right (sloop unchanged); big ships heel 6–13° | 2026-11-14 |
+| Chase view | "Cruise" view for just sailing: HUD and aim arcs faded out, any click, zoom or rotate returned to the map | Owner liked it enough to want to play in it, as an option for single-ship play | Fully playable chase view: HUD and arcs stay, clicks fire, wheel zooms, drag/Q/E orbit; only C leaves. Map view stays the default | 2026-11-14 |
 
 ---
 

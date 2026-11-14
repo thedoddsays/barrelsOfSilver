@@ -42,10 +42,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event.is_action_pressed("ammo_grape"):
 		ammo = Ship.Ammo.GRAPE
 	elif event.is_action_pressed("fire"):
-		if camera_rig and camera_rig.cruising:
-			camera_rig.set_cruise(false)  # first click returns to the map view
-		else:
-			ship.fire(aim_side, ammo)
+		ship.fire(aim_side, ammo)
 
 
 func _physics_process(_delta: float) -> void:
@@ -73,9 +70,13 @@ func _update_aim_side() -> void:
 	var mp := get_viewport().get_mouse_position()
 	var origin := cam.project_ray_origin(mp)
 	var dir := cam.project_ray_normal(mp)
-	if dir.y > -0.001:
-		return  # cursor is on the sky
-	var hit := origin + dir * (-origin.y / dir.y)
+	var hit: Vector3
+	if dir.y < -0.01:
+		hit = origin + dir * (-origin.y / dir.y)
+	else:
+		# Cursor above the horizon (chase view): aim along the look direction instead.
+		var flat := Vector3(dir.x, 0.0, dir.z).normalized()
+		hit = origin + flat * 300.0
 	var rel := hit - ship.global_position
 	rel.y = 0.0
 	var lateral := rel.dot(ship.side_dir(1))
@@ -92,11 +93,7 @@ func _update_aim_side() -> void:
 ## Bright when that side is loaded, dim red while reloading.
 func _draw_arcs() -> void:
 	var loaded := ship.can_fire(aim_side)
-	var fade := 1.0 - camera_rig.cruise_blend if camera_rig else 1.0
-	if fade <= 0.01:
-		return  # hidden in cruise view
 	var col := Color(1.0, 0.95, 0.75, 0.55) if loaded else Color(1.0, 0.45, 0.35, 0.22)
-	col.a *= fade
 	var step := 0.05
 	var starts: Array[Vector3] = []
 	var ends: Array[Vector3] = []
