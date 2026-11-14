@@ -41,6 +41,18 @@ REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 # "gaff" in the spec); height k multiplies mast_frac * L (deck to truck).
 # ---------------------------------------------------------------------------
 SHIPS = {
+    # Open oared boats: no deck (floorboards and rowing benches instead), oarlock markers for
+    # ship.gd's oars, swivel guns on the rail. The periagua is a dugout: pointed both ends.
+    "periagua": dict(L=12.0, B=2.4, H=1.1, guns=1, mast_frac=0.55,
+                     masts=[("gaff", -0.22, 0.85), ("gaff", 0.1, 1.0)],
+                     sprit_len=0.0, sprit_angle=0.0, bow_full=1.3, transom=0.04, forefoot=0.5,
+                     open=True, double_ended=True, oars=7, gun_span=(-0.42, -0.42),
+                     palette={"Bottom": (0.36, 0.26, 0.17), "Inner": (0.44, 0.31, 0.2),
+                              "Deck": (0.55, 0.43, 0.29)}),
+    "barco_luengo": dict(L=16.0, B=3.4, H=1.5, guns=1, mast_frac=0.45,
+                         masts=[("lateen", -0.12, 1.0)],
+                         sprit_len=0.0, sprit_angle=0.0, bow_full=1.5, transom=0.36,
+                         open=True, oars=9, gun_span=(-0.44, -0.44)),
     "sloop": dict(L=16.0, B=4.6, H=2.2, guns=5, mast_frac=0.8,
                   masts=[("gaff", -0.1, 1.0)],
                   sprit_len=0.54, sprit_angle=12.0),
@@ -119,6 +131,13 @@ def setup(ship_id):
     n = s["guns"]
     g0, g1 = s.get("gun_span", (-0.25, 0.22))  # ship.gd's spec layout uses -0.25 .. 0.22
     C.GUN_Z = [(g0 + ((g1 - g0) * i / (n - 1) if n > 1 else (g1 - g0) / 2)) * L for i in range(n)]
+    C.OPEN = s.get("open", False)
+    C.DOUBLE = s.get("double_ended", False)
+    C.OARS = s.get("oars", 0)
+    C.PALETTE = s.get("palette", {})
+    if C.OPEN:
+        C.BULWARK = 0.12 * C.thick  # the gunwale stands just above the 'deck' line
+        C.SHEER_MID = 0.5 * H + C.BULWARK
     C.QD = s["qd"] * L if "qd" in s else None
     C.FC = s["fc"] * L if "fc" in s else None
     C.RAISE = 1.4 * C.thick  # quarterdeck / forecastle height above the main deck
@@ -179,7 +198,9 @@ def z_fore(h):  # stem profile: a curved forefoot
     return C.FOREFOOT_Z + (C.STEM_TOP_Z - C.FOREFOOT_Z) * (1.0 - (1.0 - h) ** 2.2)
 
 
-def z_aft(h):  # raked sternpost and transom
+def z_aft(h):  # raked sternpost and transom (or a second curved stem on a double-ender)
+    if C.DOUBLE:
+        return C.POST_FOOT_Z + (C.TRANSOM_TOP_Z - C.POST_FOOT_Z) * (1.0 - (1.0 - h) ** 2.2)
     return C.POST_FOOT_Z + (C.TRANSOM_TOP_Z - C.POST_FOOT_Z) * h
 
 
@@ -212,6 +233,13 @@ def make_rows():
     rows = []
     for f in (0.0, 0.03, 0.08, 0.15, 0.24, 0.35, 0.48, 0.62, 0.76, 0.89, 1.0):
         rows.append(lambda z, f=f: C.KEEL + (C.BOOT_TOP - C.KEEL) * f)
+    if C.OPEN:
+        g = GUNWALE * C.thick
+        rows.append(lambda z: floor_y())
+        rows.append(lambda z: (floor_y() + sheer(z) - g) / 2.0)
+        rows.append(lambda z: sheer(z) - g)
+        rows.append(lambda z: sheer(z))
+        return rows
     for f in (1.0 / 3.0, 2.0 / 3.0):
         rows.append(lambda z, f=f: C.BOOT_TOP + ((deck(z) - C.WALE[0]) - C.BOOT_TOP) * f)
     rows.append(lambda z: deck(z) - C.WALE[0])
@@ -228,7 +256,20 @@ def make_rows():
 BOTTOM, TOPSIDES, STRAKE, DECK, INNER, SPAR, WOOD, BLACK, IRON = range(9)
 
 
+GUNWALE = 0.14  # open boats: dark band along the top of the side
+FLOOR_ROW = 11  # open boats: floorboards at this row (see floor_y)
+
+
+def floor_y():
+    """Open boats: floorboards a quarter of the hull depth above the waterline (about
+    -0.19 H, set by ship.gd's buoyancy). The ocean is one opaque surface, so anything inside
+    the hull below the waterline would show water straight through it."""
+    return -0.19 * C.H + 0.25 * C.H
+
+
 def row_mat(r):
+    if C.OPEN:
+        return BOTTOM if r < 10 else (BLACK if r == 13 else TOPSIDES)
     if r < 10:
         return BOTTOM
     if r == 13:
@@ -388,6 +429,10 @@ def build_hull(mb):
                  row_mat(r) if j == T - 1 else (BOTTOM if r < 10 else (STRAKE if DR <= r < DR + 2 else TOPSIDES)),
                  False, want)
 
+    if C.OPEN:
+        build_open_inside(mb, grid, T, R)
+        return grid
+
     # Inner bulwarks, rail cap, deck
     bt = C.BULWARK_THICK
     rc = C.thick
@@ -521,6 +566,91 @@ def build_hull(mb):
     return grid
 
 
+def build_open_inside(mb, grid, T, R):
+    """Open boat: inner skin, floorboards, gunwale cap, keel, rowing benches."""
+    t = 0.08 * C.thick
+
+    def inner(p):
+        return Vector((max(p.x - t, 0.02), p.y, p.z))
+
+    for side in (1, -1):
+        for r in range(FLOOR_ROW, R - 1):
+            for j in range(T - 1):
+                q = [inner(grid[r][j]), inner(grid[r][j + 1]), inner(grid[r + 1][j + 1]), inner(grid[r + 1][j])]
+                mb.f([mb.v((p.x * side, p.y, p.z), (-p.z / 2.0, p.y / 2.0)) for p in q], INNER, True, (-side, 0, 0))
+        for j in range(T - 1):
+            o0, o1 = grid[R - 1][j], grid[R - 1][j + 1]
+            i0, i1 = inner(o0), inner(o1)
+            pts = [(o0.x + 0.02, o0.y + 0.03, o0.z), (o1.x + 0.02, o1.y + 0.03, o1.z),
+                   (i1.x - 0.01, i1.y + 0.03, i1.z), (i0.x - 0.01, i0.y + 0.03, i0.z)]
+            mb.f([mb.v((q[0] * side, q[1], q[2])) for q in pts], BLACK, False, (0, 1, 0))
+    for j in range(T - 1):  # floorboards
+        a, b = inner(grid[FLOOR_ROW][j]), inner(grid[FLOOR_ROW][j + 1])
+        mb.f([mb.v((a.x, a.y, a.z), (-a.z / 2, a.x / 2)), mb.v((b.x, b.y, b.z), (-b.z / 2, b.x / 2)),
+              mb.v((-b.x, b.y, b.z), (-b.z / 2, -b.x / 2)), mb.v((-a.x, a.y, a.z), (-a.z / 2, -a.x / 2))],
+             DECK, False, (0, 1, 0))
+    for end in (0, T - 1):  # close the ends of the inner skin above the floor
+        for r in range(FLOOR_ROW, R - 1):
+            a, b = inner(grid[r][end]), inner(grid[r + 1][end])
+            mb.f([mb.v((a.x, a.y, a.z)), mb.v((b.x, b.y, b.z)), mb.v((-b.x, b.y, b.z)), mb.v((-a.x, a.y, a.z))],
+                 INNER, False, (0, 0, -1 if end == 0 else 1))
+    k0 = C.FOREFOOT_Z + 0.025 * C.L
+    k1 = C.POST_FOOT_Z - (0.025 * C.L if C.DOUBLE else 0.0)
+    box(mb, (0.0, C.KEEL - 0.06 * C.sh, (k0 + k1) / 2.0), (0.14 * C.thick, 0.14 * C.sh, k1 - k0), BOTTOM)
+
+
+def oar_stations():
+    n = C.OARS
+    return [(-0.3 + 0.55 * i / max(n - 1, 1)) * C.L for i in range(n)]
+
+
+def build_open_fittings(mb, markers):
+    sl, sh = C.sl, C.sh
+    # Rowing benches with an oarlock (thole pin) at each end; the oars are drawn by ship.gd
+    for i, z in enumerate(oar_stations()):
+        yb = sheer(z) - 0.3 * C.thick
+        xb = hull_x(yb, z) - 0.08 * C.thick
+        box(mb, (0, yb, z), (2 * xb, 0.06, 0.28), WOOD)
+        xo = hull_x(sheer(z), z)
+        for side in (1, -1):
+            box(mb, (side * xo, sheer(z) + 0.1, z), (0.05, 0.16, 0.05), BLACK)
+        markers["oar_%d" % i] = (xo + 0.02, sheer(z) + 0.06, z)
+    # Swivel guns on posts at the rail
+    for gi, z in enumerate(C.GUN_Z):
+        y = sheer(z) + 0.3
+        xo = hull_x(sheer(z), z)
+        for side in (1, -1):
+            cyl(mb, (side * (xo - 0.05), sheer(z) - 0.1, z), (side * (xo - 0.05), y - 0.04, z), 0.05, 0.05, WOOD, 6)
+            cyl(mb, (side * (xo - 0.45), y, z), (side * (xo + 0.35), y, z), 0.07, 0.05, IRON, 8)
+        markers["gun_%d" % gi] = (xo + 0.4, y, z)
+    build_rudder(mb, tiller=True)
+
+
+def build_open_rig(mb, markers):
+    rs = max(C.sh ** 0.8, 0.6)
+    masts = mast_list()
+    tallest = max(range(len(masts)), key=lambda i: masts[i][2])
+    for i, (kind, z, h) in enumerate(masts):
+        yf = deck_c(z) - 0.25 * C.thick  # foot marker: just below the gunwale
+        floor = floor_y()
+        top = yf + h
+        cyl(mb, (0, floor, z), (0, top, z), 0.1 * rs, 0.065 * rs, SPAR, 8)
+        cyl(mb, (0, top, z), (0, top + 0.06, z), 0.08 * rs, 0.08 * rs, BLACK, 6)
+        head = top - (0.25 if kind == "lateen" else 0.35) * C.thick
+        markers["mast_%d" % i] = (0.0, yf, z)
+        markers["mast_%d_head" % i] = (0.0, head, z)
+        markers["mast_%d_top" % i] = (0.0, top, z)
+        if i == tallest:
+            markers["flag"] = (0.0, top + 0.1, z)
+        if kind == "lateen":  # a pair of shrouds a side, and a stay to the stem head
+            for side in (1, -1):
+                for dz in (-0.3, 0.5):
+                    zz = z + dz * C.sl
+                    rope(mb, (side * hull_x(sheer(zz), zz), sheer(zz), zz), (side * 0.08, head - 0.2, z), 0.02)
+            zs = C.STEM_TOP_Z + 0.4
+            rope(mb, (0, sheer(zs) + 0.05, zs), (0, head - 0.1, z), 0.02)
+
+
 # ---------------------------------------------------------------------------
 # Fittings and guns
 # ---------------------------------------------------------------------------
@@ -595,20 +725,8 @@ def build_fittings(mb, markers):
             cyl(mb, (side * (xo + 0.12), yp, z), (side * (xo + 0.22), yp, z), 0.105 * g, 0.105 * g, IRON, 8)
         markers["gun_%d" % gi] = (xo + 0.25, yp, z)
 
-    # Rudder (outboard, on the sternpost) and tiller over the taffrail
-    ys = sheer_top(C.TRANSOM_TOP_Z)
-    top = ys + 0.15 * sh
-    kb = C.KEEL - 0.15 * sh
-
-    def le(y):
-        return C.POST_FOOT_Z + 0.05 + (C.TRANSOM_TOP_Z + 0.08 - C.POST_FOOT_Z - 0.05) * (y - kb) / (top - kb)
-    rud = [(kb, le(kb)), (kb, le(kb) + 1.0 * sl), (0.3 * sh, le(0.3 * sh) + 0.95 * sl),
-           (1.1 * sh, le(1.1 * sh) + 0.32 * sl), (top, le(top) + 0.24 * sl), (top, le(top))]
-    prism(mb, rud, 0.08 * C.thick, TOPSIDES)
-    if C.QD is None:
-        zt = 0.27 * L
-        cyl(mb, (0, top - 0.05, le(top) + 0.12), (0, deck_c(zt) + 0.8, zt), 0.07, 0.05, WOOD, 6)
-    else:
+    ys = build_rudder(mb, tiller=C.QD is None)
+    if C.QD is not None:
         # Ship's wheel on the quarterdeck, between the mizzen and the taffrail
         zh = mz[-1] + (C.TRANSOM_TOP_Z - mz[-1]) * 0.45
         yh = deck_top_c(zh) + 1.0
@@ -624,6 +742,25 @@ def build_fittings(mb, markers):
     zl = C.TRANSOM_TOP_Z - 0.1
     cyl(mb, (0, ys + 0.05, zl), (0, ys + 0.7, zl), 0.04, 0.04, BLACK, 6)
     box(mb, (0, ys + 0.85, zl), (0.24, 0.32, 0.24), BLACK)
+
+
+def build_rudder(mb, tiller):
+    """Outboard rudder on the sternpost, with a tiller over the taffrail. Returns the rail
+    height at the stern."""
+    L, sl, sh = C.L, C.sl, C.sh
+    ys = sheer_top(C.TRANSOM_TOP_Z)
+    top = ys + 0.15 * sh
+    kb = C.KEEL - 0.15 * sh
+
+    def le(y):
+        return C.POST_FOOT_Z + 0.05 + (C.TRANSOM_TOP_Z + 0.08 - C.POST_FOOT_Z - 0.05) * (y - kb) / (top - kb)
+    rud = [(kb, le(kb)), (kb, le(kb) + 1.0 * sl), (0.3 * sh, le(0.3 * sh) + 0.95 * sl),
+           (1.1 * sh, le(1.1 * sh) + 0.32 * sl), (top, le(top) + 0.24 * sl), (top, le(top))]
+    prism(mb, rud, 0.08 * C.thick, TOPSIDES)
+    if tiller:
+        zt = 0.27 * L
+        cyl(mb, (0, top - 0.05, le(top) + 0.12), (0, deck_c(zt) + 0.8 * C.thick, zt), 0.07, 0.05, WOOD, 6)
+    return ys
 
 
 def build_boat(mb, zc, y0, L, Bh):
@@ -889,6 +1026,7 @@ def build_materials():
     mats = []
     normal = None
     for i, (name, col, var, seam, grain, rough) in enumerate(specs):
+        col = C.PALETTE.get(name, col)
         rgb, nrm = plank_maps(11 + i, col, var, seam, grain)
         if normal is None:
             normal = save_image("planks_normal", nrm, True)
@@ -962,8 +1100,12 @@ def build(ship_id, preview_dir):
     mb = MB()
     markers = {}
     build_hull(mb)
-    build_fittings(mb, markers)
-    build_rig(mb, markers)
+    if C.OPEN:
+        build_open_fittings(mb, markers)
+        build_open_rig(mb, markers)
+    else:
+        build_fittings(mb, markers)
+        build_rig(mb, markers)
     to_object(mb, "hull", mats)
     for name, p in markers.items():
         e = bpy.data.objects.new(name, None)

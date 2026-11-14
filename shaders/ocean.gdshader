@@ -15,6 +15,17 @@ uniform vec3 foam_color : source_color = vec3(0.92, 0.95, 0.97);
 uniform float foam_amount = 1.0;
 uniform float ripple_strength = 1.0;
 
+// Hull mask: the sea is one surface and a ship only rides the average wave, so a crest
+// shorter than the ship would poke up through her deck. ocean.gd passes every afloat ship;
+// water inside a hull's outline AND above her deck (an open boat's floorboards) isn't drawn.
+// Water below the deck is left alone (the hull hides it), so nothing shows through from
+// low angles. Sinking ships aren't passed, so the sea closes over them.
+const int MAX_HULLS = 96;
+uniform int hull_count = 0;
+uniform vec4 hull_origin[MAX_HULLS];  // ship origin (world), w = length
+uniform vec4 hull_x[MAX_HULLS];  // ship +X (starboard) axis, w = beam
+uniform vec4 hull_z[MAX_HULLS];  // ship +Z (aft) axis, w = deck height in ship space
+
 varying vec3 v_world;
 varying vec3 v_normal;
 varying float v_height;
@@ -140,7 +151,49 @@ float wind_patches(vec2 p, float t) {
 	return clamp(0.5 + a * 0.9 + b * 0.5, 0.0, 1.0);
 }
 
+// Plan outline matching tools/blender/build_ship.py's lines: bow at -0.625 L, widest at
+// -0.094 L, transom at +0.3875 L about 0.6 of the beam wide.
+bool inside_hull(vec3 w) {
+	for (int i = 0; i < hull_count; i++) {
+		vec3 d = w - hull_origin[i].xyz;
+		float L = hull_origin[i].w;
+		if (dot(d.xz, d.xz) > 0.5 * L * L) {
+			continue;
+		}
+		vec3 X = hull_x[i].xyz;
+		vec3 Z = hull_z[i].xyz;
+		if (dot(d, cross(Z, X)) < hull_z[i].w) {
+			continue;  // below the deck
+		}
+		float lx = abs(dot(d, X));
+		float lz = dot(d, Z);
+		float b = 0.5 * hull_x[i].w;
+		float zm = -0.094 * L;
+		float half_w;
+		if (lz < zm) {
+			float s = (zm - lz) / (0.531 * L);
+			if (s >= 1.0) {
+				continue;
+			}
+			half_w = b * sqrt(1.0 - pow(s, 2.2));
+		} else {
+			float s = (lz - zm) / (0.4815 * L);
+			if (s >= 1.0) {
+				continue;
+			}
+			half_w = b * (1.0 - 0.4 * pow(s, 2.2));
+		}
+		if (lx < half_w) {
+			return true;
+		}
+	}
+	return false;
+}
+
 void fragment() {
+	if (hull_count > 0 && inside_hull(v_world)) {
+		discard;
+	}
 	vec2 p = v_world.xz;
 	float dist = length(CAMERA_POSITION_WORLD - v_world);
 	// Fade fine detail with distance so it doesn't shimmer/alias far away.

@@ -1,0 +1,29 @@
+[gd_resource type="Resource" script_class="ShipSpec" format=3]
+
+[ext_resource type="Script" path="res://scripts/ship_spec.gd" id="1_spec"]
+[ext_resource type="PackedScene" path="res://assets/ships/barco_luengo/barco_luengo.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_spec")
+id = "barco_luengo"
+display_name = "Barco luengo"
+tier = "light"
+rarity = "common"
+length = 16.0
+beam = 3.4
+hull_height = 1.5
+mass_t = 10.0
+max_hull = 40.0
+draft = "very shallow"
+rig = 3
+speed_mult = 0.85
+turn_mult = 1.2
+max_crew = 40.0
+guns_per_side = 1
+gun_power = 0.35
+gun_decks = 1
+cargo_t = 10.0
+masts = PackedStringArray("lateen")
+mast_height_frac = 0.45
+jib = false
+model = ExtResource("2_model")

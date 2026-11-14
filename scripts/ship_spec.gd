@@ -30,6 +30,8 @@ enum Rig { FORE_AND_AFT, MIXED, SQUARE, OARED }
 @export_group("Crew and guns")
 @export var max_crew := 80.0
 @export var guns_per_side := 5
+## Damage multiplier for this ship's shot: 1 = proper cannon, ~0.3 = swivel guns on boats.
+@export var gun_power := 1.0
 @export var gun_decks := 1  ## rows of gun ports; guns are split evenly between them
 @export var cargo_t := 40.0
 
@@ -40,7 +42,8 @@ enum Rig { FORE_AND_AFT, MIXED, SQUARE, OARED }
 @export var model: PackedScene
 ## One entry per mast, bow to stern: "square" (yards and square sails), "gaff" (a
 ## fore-and-aft sail on a boom that swings to leeward) or "spanker" (a full-rigged ship's
-## mizzen: a gaff sail with a square topsail above it).
+## mizzen: a gaff sail with a square topsail above it) or "lateen" (a triangular sail on a
+## long slanting yard, as on a barco luengo).
 @export var masts: PackedStringArray = PackedStringArray(["gaff"])
 @export var mast_height_frac := 0.8  ## tallest mast height as a fraction of length
 @export var jib := true  ## triangular headsail from the foremast to the bowsprit

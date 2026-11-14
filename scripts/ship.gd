@@ -45,6 +45,10 @@ const AMMO := [
 ]
 ## Collisions. Closing speeds (m/s, along the contact normal) below BUMP_SPEED are harmless
 ## nudges. Above it, each m/s does this much hull damage:
+## Oared craft: the crew rows when the sails can't do better, giving at least this share of
+## full thrust on any heading, even dead upwind (W/S still sets how hard they pull).
+const OAR_POWER := 0.65
+
 const BUMP_SPEED := 1.5
 const RAM_DAMAGE_TAKEN := 4.0  ## to the ship that gets rammed (a square hit on its side)
 const RAM_DAMAGE_RAMMER := 0.8  ## to the ship doing the ramming: a stout bow takes far less
@@ -69,9 +73,9 @@ const RIG_CURVES := {
 		Vector2(90, 0.85), Vector2(135, 1.0), Vector2(180, 0.9)],
 	ShipSpec.Rig.SQUARE: [Vector2(0, 0.22), Vector2(35, 0.3), Vector2(60, 0.45),
 		Vector2(90, 0.8), Vector2(135, 1.0), Vector2(180, 0.95)],
-	# Oars aren't simulated yet; oared craft sail like a mixed rig for now.
+	# Oared craft: small fore-and-aft sails plus the oar floor (OAR_POWER, see _efficiency).
 	ShipSpec.Rig.OARED: [Vector2(0, 0.25), Vector2(30, 0.35), Vector2(60, 0.6),
-		Vector2(90, 0.85), Vector2(135, 1.0), Vector2(180, 0.9)],
+		Vector2(90, 0.85), Vector2(135, 1.0), Vector2(180, 0.9)],  # sails; oars: OAR_POWER
 }
 
 var ocean: Ocean
@@ -163,6 +167,10 @@ var _booms: Array[Node3D] = []  ## gaff booms, swung out to leeward
 var _jibs: Array[Dictionary] = []  ## headsails: {pivot, base}, swung round their stay
 var _canvas: Array[Node3D] = []  ## sails, furled by scaling y toward their spar (origin)
 var _bellied: Array[Node3D] = []  ## fore-and-aft sails, flipped to belly out to leeward
+var _oars: MultiMeshInstance3D  ## oared craft: every oar in one draw call
+var _oarlocks: Array[Vector3] = []  ## starboard oarlocks (port mirrors them)
+var _oar_phase := 0.0
+var _rowing := false  ## the crew is pulling (oars beat the sails on this heading)
 var _wake: CPUParticles3D
 
 
@@ -220,6 +228,8 @@ func _apply_spec() -> void:
 
 	_curve = RIG_CURVES[spec.rig]
 	_irons_deg = (_curve[1] as Vector2).x
+	if spec.rig == ShipSpec.Rig.OARED:
+		_irons_deg = 0.0  # oars take her anywhere
 
 	# Buoyancy probes: 2 x 4 grid under the hull, as on the sloop.
 	_probes.clear()
@@ -356,6 +366,12 @@ func is_hostile_to(other: Ship) -> bool:
 	return other != null and other.faction != faction
 
 
+## Height in ship space above which the ocean isn't drawn inside the hull outline (see
+## ocean.gdshader): the deck, or an open boat's floorboards.
+func water_mask_height() -> float:
+	return (0.06 if not _oarlocks.is_empty() else 0.45) * _height
+
+
 func gun_count() -> int:
 	return _guns.size()
 
@@ -413,15 +429,15 @@ func contains_point(p: Vector3) -> bool:
 		and l.z > -0.625 * _len and l.z < 0.4375 * _len)
 
 
-func take_hit(ammo: int, at: Vector3, ball_velocity: Vector3, by: Ship = null) -> void:
+func take_hit(ammo: int, at: Vector3, ball_velocity: Vector3, by: Ship = null, power := 1.0) -> void:
 	if is_sunk:
 		return
 	_note_attack(by)
 	var a: Dictionary = AMMO[ammo]
-	var r := randf_range(0.6, 1.4)
+	var r := randf_range(0.6, 1.4) * power
 	sails = maxf(sails - float(a["sails"]) * r, 0.0)
-	crew = maxf(crew - float(a["crew"]) * randf_range(0.5, 1.5), 0.0)
-	apply_impulse(ball_velocity.normalized() * 1500.0, at - global_position)
+	crew = maxf(crew - float(a["crew"]) * randf_range(0.5, 1.5) * power, 0.0)
+	apply_impulse(ball_velocity.normalized() * 1500.0 * power, at - global_position)
 	Fx.splinters(get_parent(), at)
 	_damage_hull(float(a["hull"]) * r, "cannon")
 
@@ -628,6 +644,7 @@ func _physics_process(delta: float) -> void:
 	var off_wind := rad_to_deg(fwd.angle_to(-wind_dir))  # 0 = bow into the wind
 	sail_efficiency = _efficiency(off_wind)
 	point_of_sail = _point_of_sail_name(off_wind)
+	_rowing = is_rowing(off_wind) and sail_amount > 0.05
 	var push := _thrust * thrust_limit * Wind.strength * sail_efficiency * sail_amount * sail_power() * wet_frac
 	apply_central_force(fwd * push)
 
@@ -661,6 +678,7 @@ func _fire_gun(side: int, gun: int, ammo: int) -> void:
 		ball.shooter = self
 		ball.shooter_faction = faction
 		ball.ammo = ammo
+		ball.power = spec.gun_power
 		ball.ocean = ocean
 		ball.velocity = shot_velocity(side, ammo, randf_range(-spread, spread), randf_range(-spread, spread) * 0.4)
 		get_parent().add_child(ball)
@@ -670,8 +688,21 @@ func _fire_gun(side: int, gun: int, ammo: int) -> void:
 	apply_impulse(-out * 2500.0, muzzle - global_position)  # recoil rocks the hull
 
 
-## Sail efficiency from this rig's point-of-sail curve (see RIG_CURVES).
+## Sail efficiency from this rig's point-of-sail curve (see RIG_CURVES); oared craft row
+## when that beats the sails.
 func _efficiency(off_deg: float) -> float:
+	var e := _sail_curve(off_deg)
+	if spec.rig == ShipSpec.Rig.OARED:
+		return maxf(e, OAR_POWER)
+	return e
+
+
+## True if an oared craft is rowing at this angle off the wind (the oars beat the sails).
+func is_rowing(off_deg: float) -> bool:
+	return spec.rig == ShipSpec.Rig.OARED and _sail_curve(off_deg) < OAR_POWER
+
+
+func _sail_curve(off_deg: float) -> float:
 	for i in range(1, _curve.size()):
 		var b: Vector2 = _curve[i]
 		if off_deg <= b.x:
@@ -681,6 +712,8 @@ func _efficiency(off_deg: float) -> float:
 
 
 func _point_of_sail_name(off_deg: float) -> String:
+	if is_rowing(off_deg):
+		return "Rowing"
 	if off_deg < _irons_deg:
 		return "In irons"
 	if off_deg < 70.0:
@@ -717,6 +750,8 @@ func _process(delta: float) -> void:
 	var lee := 1.0 if wl.x >= 0.0 else -1.0
 	for c in _bellied:
 		c.scale.x = lee
+	if _oars:
+		_animate_oars(delta)
 	# Forward speed only, so bobbing in a swell doesn't leave a wake.
 	_wake.emitting = absf(_v_fwd) > 0.8 and not is_sunk
 
@@ -740,6 +775,7 @@ func _build_visuals() -> void:
 	var canvas := _mat(sail_color * 0.72, 0.95)
 	canvas.cull_mode = BaseMaterial3D.CULL_DISABLED
 	canvas.backlight_enabled = true  # sun shining through the canvas
+	canvas.disable_receive_shadows = true  # thin curved canvas self-shadows in jagged streaks
 	canvas.backlight = sail_color * 0.2
 	var rig := _build_model() if spec.model != null else _build_placeholder()
 	_build_rig(rig, spar, canvas)
@@ -792,6 +828,14 @@ func _build_model() -> Dictionary:
 	if flag != null:
 		rig["flag"] = flag
 		_mast_top = (flag as Vector3).y
+	# Oarlocks for oared craft
+	for i in 64:
+		var o: Variant = marker.call("oar_%d" % i)
+		if o == null:
+			break
+		_oarlocks.append(o)
+	if not _oarlocks.is_empty():
+		_build_oars()
 	var tack: Variant = marker.call("jib_tack")
 	var jhead: Variant = marker.call("jib_head")
 	if spec.jib and tack != null and jhead != null:
@@ -872,7 +916,9 @@ func _build_rig(rig: Dictionary, spar: Material, canvas: Material) -> void:
 		var foot: Vector3 = m["foot"]
 		var top: Vector3 = m["top"]
 		var mh := top.y - foot.y
-		if m["kind"] == "gaff" or m["kind"] == "spanker":
+		if m["kind"] == "lateen":
+			_add_lateen_sail(foot, (m["head"] as Vector3).y - foot.y, minf(0.85 * _len, 1.7 * mh), spar, canvas)
+		elif m["kind"] == "gaff" or m["kind"] == "spanker":
 			# Fore-and-aft sail aft of the mast, as long as the deck allows and clear of the
 			# next mast aft (schooner foresail, ketch mainsail). A "spanker" mizzen (full-rigged
 			# ship) also sets a square topsail above it.
@@ -944,6 +990,38 @@ func _add_gaff_sail(mast_foot: Vector3, length: float, h: float, boom_h: float,
 	_bellied.append(sail)
 
 
+## Lateen: a triangular sail under a long yard slung at the masthead, slanting up aft. It
+## swings to leeward like a boom and is brailed up to the yard to furl.
+func _add_lateen_sail(mast_foot: Vector3, head_h: float, yard_len: float, spar_mat: Material,
+		sail_mat: Material) -> void:
+	var pivot := Node3D.new()
+	pivot.position = mast_foot
+	add_child(pivot)
+	_booms.append(pivot)
+	var tilt := deg_to_rad(40.0)
+	var along := Vector3(0.0, sin(tilt), cos(tilt))  # up and aft
+	var hang := Vector3(0.0, head_h, 0.0)
+	var fore := hang - along * yard_len * 0.38
+	var aft := hang + along * yard_len * 0.62
+	_add_spar(pivot, fore, aft, 0.07 * _vscale, spar_mat)
+	# The sail node's local z runs along the yard and -y hangs down from it, so scaling y
+	# brails the canvas up to the yard.
+	var frame := Node3D.new()
+	frame.position = fore
+	frame.basis = Basis(Vector3.RIGHT, -tilt)
+	pivot.add_child(frame)
+	var clew_ship := Vector3(0.0, 1.0 * _vscale, aft.z - 0.1 * yard_len)
+	var clew := frame.basis.inverse() * (clew_ship - fore)
+	clew.x = 0.0
+	var sail := MeshInstance3D.new()
+	sail.mesh = _sail_mesh([Vector3.ZERO, clew, Vector3(0.0, 0.0, yard_len * 0.98), Vector3.ZERO],
+		Vector3.RIGHT, 0.08 * yard_len)
+	sail.material_override = sail_mat
+	frame.add_child(sail)
+	_canvas.append(sail)
+	_bellied.append(sail)
+
+
 ## Triangular headsail hoisted on a stay from `tack` up to `head`, sheeted aft to `clew`.
 ## It swings round the stay to leeward and is lowered down the stay to furl.
 func _add_jib(tack: Vector3, head: Vector3, clew: Vector3, sail_mat: Material) -> void:
@@ -965,6 +1043,49 @@ func _add_jib(tack: Vector3, head: Vector3, clew: Vector3, sail_mat: Material) -
 	pivot.add_child(sail)
 	_canvas.append(sail)
 	_bellied.append(sail)
+
+
+## All the oars as one MultiMesh (one draw call). Each oar pivots at its oarlock.
+func _build_oars() -> void:
+	var length := maxf(3.0, 1.1 * _beam + 1.2)
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var shaft := BoxMesh.new()
+	shaft.size = Vector3(length, 0.07, 0.07)
+	st.append_from(shaft, 0, Transform3D(Basis(), Vector3(length * 0.2, 0.0, 0.0)))
+	var blade := BoxMesh.new()
+	blade.size = Vector3(length * 0.28, 0.03, 0.2)
+	st.append_from(blade, 0, Transform3D(Basis(), Vector3(length * 0.56, 0.0, 0.0)))
+	var mesh := st.commit()
+	mesh.surface_set_material(0, _mat(Color(0.5, 0.37, 0.22), 0.8))
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.mesh = mesh
+	mm.instance_count = _oarlocks.size() * 2
+	_oars = MultiMeshInstance3D.new()
+	_oars.multimesh = mm
+	_oars.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(_oars)
+	_animate_oars(0.0)
+
+
+## Rowing: the oars sweep fore and aft, blades dipping on the pull. Otherwise they're held
+## level, blades clear of the water.
+func _animate_oars(delta: float) -> void:
+	var sweep := 0.0
+	var dip := -0.12
+	if _rowing:
+		_oar_phase = fmod(_oar_phase + delta * (1.2 + 1.6 * sail_amount), TAU)
+		sweep = 0.42 * sin(_oar_phase)
+		dip = 0.22 + 0.12 * cos(_oar_phase)
+	var mm := _oars.multimesh
+	var i := 0
+	for lock in _oarlocks:
+		for side: float in [1.0, -1.0]:
+			var yaw := (0.0 if side > 0.0 else PI) + side * sweep
+			var b := Basis(Vector3.UP, yaw) * Basis(Vector3.BACK, -dip)
+			mm.set_instance_transform(i, Transform3D(b, Vector3(lock.x * side, lock.y, lock.z)))
+			i += 1
 
 
 ## A sail as a curved patch between four corners (bottom-front, bottom-back, top-back,

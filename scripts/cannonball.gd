@@ -10,6 +10,7 @@ var velocity := Vector3.ZERO
 var shooter: Ship
 var shooter_faction := -1  ## balls pass through ships on the shooter's side (no friendly fire)
 var ammo := 0
+var power := 1.0  ## damage multiplier from the shooter's guns (swivels are weaker)
 var ocean: Ocean
 
 var _life := 0.0
@@ -65,7 +66,7 @@ func _physics_process(delta: float) -> void:
 		if s == shooter or s.is_sunk or s.faction == shooter_faction:
 			continue
 		if s.contains_point(mid) or s.contains_point(to):
-			s.take_hit(ammo, to, velocity, shooter if is_instance_valid(shooter) else null)
+			s.take_hit(ammo, to, velocity, shooter if is_instance_valid(shooter) else null, power)
 			_die()
 			return
 

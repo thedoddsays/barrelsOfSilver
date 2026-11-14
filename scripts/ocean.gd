@@ -38,12 +38,46 @@ func _ready() -> void:
 	extra_cull_margin = 16.0
 
 
+const MAX_HULLS := 96  ## must match ocean.gdshader
+
+var hull_mask_enabled := true  ## debug: false shows the raw sea (crests through decks)
+var _hull_origin := PackedVector4Array()
+var _hull_x := PackedVector4Array()
+var _hull_z := PackedVector4Array()
+
+
 func _process(_delta: float) -> void:
 	_mat.set_shader_parameter("wave_time", wave_time())
+	_update_hull_mask()
 	if follow_target:
 		var step := size / subdivisions
 		var p := follow_target.global_position
 		global_position = Vector3(snappedf(p.x, step), 0.0, snappedf(p.z, step))
+
+
+## Tell the shader where every afloat ship is, so wave crests don't show through decks.
+func _update_hull_mask() -> void:
+	_hull_origin.resize(MAX_HULLS)
+	_hull_x.resize(MAX_HULLS)
+	_hull_z.resize(MAX_HULLS)
+	var n := 0
+	for node in get_tree().get_nodes_in_group("ships"):
+		var s := node as Ship
+		if not hull_mask_enabled:
+			break
+		if s == null or s.is_sunk or n >= MAX_HULLS:
+			continue
+		var t := s.global_transform
+		var x := t.basis.x.normalized()
+		var z := t.basis.z.normalized()
+		_hull_origin[n] = Vector4(t.origin.x, t.origin.y, t.origin.z, s.length())
+		_hull_x[n] = Vector4(x.x, x.y, x.z, s.beam())
+		_hull_z[n] = Vector4(z.x, z.y, z.z, s.water_mask_height())
+		n += 1
+	_mat.set_shader_parameter("hull_count", n)
+	_mat.set_shader_parameter("hull_origin", _hull_origin)
+	_mat.set_shader_parameter("hull_x", _hull_x)
+	_mat.set_shader_parameter("hull_z", _hull_z)
 
 
 func wave_time() -> float:

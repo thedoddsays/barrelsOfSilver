@@ -6,8 +6,9 @@ const ISLAND_SEED := 1715
 const ENEMY_RESPAWN_DELAY := 10.0
 const ENEMY_FACTION := 1
 ## Debug: N adds an escort to the fleet, cycling through these (until capture exists).
-const DEBUG_ESCORTS := ["sloop", "brigantine", "pirate_frigate", "ketch", "schooner", "brig", "snow",
-		"barque", "merchantman", "east_indiaman"]
+## The fleet holds only 3 escorts, so the newest ships go first to keep them reachable.
+const DEBUG_ESCORTS := ["periagua", "barco_luengo", "sloop", "brigantine", "pirate_frigate", "ketch",
+		"schooner", "brig", "snow", "barque", "merchantman", "east_indiaman"]
 
 var ocean: Ocean
 var environment: Environment
@@ -86,7 +87,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 ## Debug stand-in for capturing: spawn an escort astern of the flagship and add it to
-## the fleet. Cycles sloop -> brigantine -> frigate.
+## the fleet. Cycles through DEBUG_ESCORTS.
 func _debug_add_escort() -> void:
 	if fleet.is_full() or player.is_sunk:
 		return

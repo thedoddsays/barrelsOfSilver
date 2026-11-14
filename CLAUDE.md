@@ -54,6 +54,10 @@ Flag-style ship combat and looks), so systems built here should carry forward.
   fading by distance) modulated by large slow "wind patches". History: value noise looked
   blocky/pixelated; summed sines looked like a tiled image (owner, 2026-11-12). Avoid both.
   Integer hash, not sin() hash, so it stays stable at large world coordinates.
+  **Hull mask (2026-11-14):** `ocean.gd` passes every afloat ship (max 96) to the shader, which discards
+  water inside the hull's plan outline above `Ship.water_mask_height()` (deck, or an open boat's floorboards),
+  so crests shorter than a ship can't show through her deck. Sunk ships are left out so the sea closes over
+  them. `Ocean.hull_mask_enabled` toggles it for debugging. Fixed owner-reported "water clipping through hulls in waves".
 - `ship.gd`: RigidBody3D, 8 buoyancy probes, anisotropic hull drag (keel), wind thrust by
   point of sail (per-rig curve from the spec, all with a thrust floor head to wind), rudder bite scales with speed, heel
   torque, braced yards, furl/unfurl sails (W/S: furled / battle / full), wake particles.
@@ -66,7 +70,7 @@ Flag-style ship combat and looks), so systems built here should carry forward.
   inertia and speed_mult, so new ships need no hand-tuning. Set hull/crew overrides AFTER add_child (spec applies
   in _ready). New class_names need a rescan before headless `--script` runs: `godot --headless --path . --import`.
   Enemies spawn as a random type (50% sloop, 35% brigantine, 15% frigate). Ketch, schooner, brig, snow,
-  barque, merchantman and East Indiaman specs (2026-11-14; sizes estimated, stats from the roster) are only in
+  barque, merchantman, East Indiaman, periagua and barco luengo specs (2026-11-14; sizes estimated, stats from the roster) are only in
   the N debug-escort cycle and the stress test so far. The pirate frigate's mizzen is now "spanker". The player's sloop is now a true
   fore-and-aft sloop: better upwind, a bit slower dead downwind than the old curve.
 - `wind.gd` (autoload `Wind`): `angle` = bearing the wind blows TOWARD; drifts and gusts.
@@ -165,6 +169,14 @@ Flag-style ship combat and looks), so systems built here should carry forward.
   Indiaman: hull models 1–3). Three-masters get a raised quarterdeck (`qd`) and forecastle (`fc`) with
   red breasts, rails and ladders, a wheel instead of a tiller, great-cabin windows and wider gun spacing
   (`gun_span`); mizzen kind "spanker" = gaff sail + square topsail (full ship rig; barque mizzen is "gaff").
+  **Small boats (2026-11-14):** periagua (12 m dugout, double-ended, 2 small gaff/sprit-like sails) and
+  barco luengo (16 m, one "lateen": triangular sail under a 40° yard, swings and brails like a boom) are
+  `open=True`: inner skin, floorboards (**kept 0.25 H above the waterline**: the ocean is one opaque
+  surface, so anything inside an open hull below the water shows sea through it; owner spotted it), benches, thole pins, `oar_N` oarlock markers, swivel guns on posts
+  (`gun_power` 0.3/0.35 scales shot damage, 1 gun a side). Rig OARED: `_efficiency` = max(sail curve,
+  `Ship.OAR_POWER` 0.65), irons 0, so they row anywhere (HUD "Rowing"); W/S still sets effort. Oars are
+  one MultiMesh (one draw call), sweeping while `_rowing`, held level otherwise. Sails don't receive
+  shadows (thin curved canvas self-shadowed in jagged streaks); they still cast them.
   It lofts the hull from lines (keel, stem profile, sheer, sections; the sloop's lines scaled by
   each ship's L/B/H plus shape knobs: bow fullness, forefoot, transom, sheer), adds deck, bulwarks,
   guns, boat, masts (gaff, square, or a snow's "trysail" pole), bowsprit (jib-boom look from 20 m)
@@ -192,7 +204,7 @@ Flag-style ship combat and looks), so systems built here should carry forward.
 2. ~~Broadside cannon combat vs. an AI ship (ammo types; sail/hull/crew damage).~~ Working, 2026-11-13;
    aim-arc flicker, upwind feel and smoke look go to a later tuning/VFX pass.
 3. Make the world editable in the editor; real ship models (sloop 2026-11-13; ketch, schooner,
-   brigantine, brig, snow, barque, merchantman, pirate frigate, East Indiaman 2026-11-14). Still to
-   model: fluyt, galleon, two- and three-deckers (ships of the line), periagua, barco luengo.
+   brigantine, brig, snow, barque, merchantman, pirate frigate, East Indiaman, periagua, barco luengo
+   2026-11-14). Still to model: fluyt, galleon, navy sloop-of-war, two- and three-deckers (ships of the line).
 4. Ports (trade, tavern, governor/nation reputation), boarding duel minigame, light
    campaign (aging, fame, treasure hunts). Scope: one region, 6–8 ports.

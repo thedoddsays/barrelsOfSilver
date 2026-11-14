@@ -117,7 +117,10 @@ func _draw_arcs() -> void:
 		_line(ends[i], ends[i + 1], col)
 	_arcs.surface_end()
 
-	# Translucent danger zone on the water between the guns and the fall of shot.
+	# Translucent danger zone on the water between the guns and the fall of shot (needs at
+	# least two guns to span; a boat with one swivel a side just shows its arc).
+	if starts.size() < 2:
+		return
 	var fill := Color(col, col.a * 0.35)
 	var near := Color(col, 0.0)
 	_arcs.surface_begin(Mesh.PRIMITIVE_TRIANGLES)

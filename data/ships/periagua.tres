@@ -1,0 +1,29 @@
+[gd_resource type="Resource" script_class="ShipSpec" format=3]
+
+[ext_resource type="Script" path="res://scripts/ship_spec.gd" id="1_spec"]
+[ext_resource type="PackedScene" path="res://assets/ships/periagua/periagua.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_spec")
+id = "periagua"
+display_name = "Periagua"
+tier = "light"
+rarity = "common"
+length = 12.0
+beam = 2.4
+hull_height = 1.1
+mass_t = 4.0
+max_hull = 25.0
+draft = "very shallow"
+rig = 3
+speed_mult = 0.7
+turn_mult = 1.3
+max_crew = 30.0
+guns_per_side = 1
+gun_power = 0.3
+gun_decks = 1
+cargo_t = 5.0
+masts = PackedStringArray("gaff", "gaff")
+mast_height_frac = 0.55
+jib = false
+model = ExtResource("2_model")
