@@ -69,7 +69,8 @@ Flag-style ship combat and looks), so systems built here should carry forward.
   ("square" yards or "gaff" boom sails, plus jib). All forces scale from the 16 m / 20 t sloop baseline by mass,
   inertia and speed_mult, so new ships need no hand-tuning. Set hull/crew overrides AFTER add_child (spec applies
   in _ready). New class_names need a rescan before headless `--script` runs: `godot --headless --path . --import`.
-  Enemies spawn as a random type (50% sloop, 35% brigantine, 15% frigate). Ketch, schooner, brig, snow,
+  Enemies spawn as a random type (50% sloop, 35% brigantine, 15% frigate). N (debug escort) cycles all 19
+  types, newest first; once the fleet is full it sends the oldest escort away. Ketch, schooner, brig, snow,
   barque, merchantman, East Indiaman, periagua and barco luengo specs (2026-11-14; sizes estimated, stats from the roster) are only in
   the N debug-escort cycle and the stress test so far. The pirate frigate's mizzen is now "spanker". The player's sloop is now a true
   fore-and-aft sloop: better upwind, a bit slower dead downwind than the old curve.
@@ -79,7 +80,8 @@ Flag-style ship combat and looks), so systems built here should carry forward.
   zooming in lowers the pitch (-32°…-68°); Q/E or right-drag rotates. **Cruise view** (C, inspired by
   Black Flag's "just sail" mode): low chase cam behind the ship following its heading, HUD and firing
   arcs fade out, fog thickens to hide the ocean mesh edge (~600 m). Wheel, right-drag, Q/E, click or C
-  returns to map view (a click there doesn't fire). Rig drives fog density and sun shadow distance.
+  returns to map view (a click there doesn't fire). Cruise distance/height scale with the ship
+  ((L/16)^0.65, (H/2.2)^0.65; cruise fog thins by the square root of that) so big ships' sterns don't fill the view. Rig drives fog density and sun shadow distance.
   `cruise_changed` signal is the hook for crew-shanty music: needs original/licensed recordings.
   Owner loved both views on first try (2026-11-12): treat the current camera values as the baseline.
 - `hud.gd`: compass (wind and heading arrows), speed, sails, point of sail, controls.
@@ -157,6 +159,11 @@ Flag-style ship combat and looks), so systems built here should carry forward.
     *folder*; the console exe is inside it.
 
 ## Open issues / feedback from last playtest
+- **Watching (2026-11-14, not reproduced):** in the ship viewer the owner once saw their sloop sailing at
+  speed with the hull under water and only mast and sail showing, after bumping a fluyt and a schooner.
+  Headless tests found nothing: no capsize at rest, circling, hard turns (worst 40°) or full-speed rams
+  (worst 21°). Sinking ships roll over on purpose, so an upside-down hull is normally a sinking ship.
+  If it recurs, log heel, depth below the local wave surface, `is_sunk`, contacts and nearby ships.
 - ~~"Very pixelated" visuals~~: resolved. Owner confirmed (2026-11-12) the water looks much
   better after the ripples were reworked (now gradient noise; see the ocean notes above).
 - ~~Speed was "super slow"~~: resolved. After the ~4× boost the owner confirmed (2026-11-12)
@@ -177,6 +184,14 @@ Flag-style ship combat and looks), so systems built here should carry forward.
   `Ship.OAR_POWER` 0.65), irons 0, so they row anywhere (HUD "Rowing"); W/S still sets effort. Oars are
   one MultiMesh (one draw call), sweeping while `_rowing`, held level otherwise. Sails don't receive
   shadows (thin curved canvas self-shadowed in jagged streaks); they still cast them.
+  **Big ships (2026-11-14):** knobs `decks` (2–3 gun decks, `DECK_GAP` 2.3 m apart: lidded ports with
+  run-out barrels on lower decks, gun markers lowest row first), `navy` (ochre bands between black wales),
+  `tumble`/`sec_k` (fluyt's pear shape), `poop` (a second raised step aft), `sheer_stern`, `beak`
+  (beakhead + head rails). Hull rows now carry their band material (`make_rows` returns rows, mats,
+  deck row). Galleon mizzen/bonaventure are "lateen" (ship.gd: yard 1.15 × mast height when not the
+  only mast). Ships over 41 m set topgallants. **Heel fix:** heel torque is capped at what the probes
+  can right (mass × beam² / height scale vs. the sloop); before that every tall hull capsized, and the
+  frigate/East Indiaman now heel about half as much as before. Big ships heel 6–13°, sloop unchanged.
   It lofts the hull from lines (keel, stem profile, sheer, sections; the sloop's lines scaled by
   each ship's L/B/H plus shape knobs: bow fullness, forefoot, transom, sheer), adds deck, bulwarks,
   guns, boat, masts (gaff, square, or a snow's "trysail" pole), bowsprit (jib-boom look from 20 m)
@@ -205,6 +220,6 @@ Flag-style ship combat and looks), so systems built here should carry forward.
    aim-arc flicker, upwind feel and smoke look go to a later tuning/VFX pass.
 3. Make the world editable in the editor; real ship models (sloop 2026-11-13; ketch, schooner,
    brigantine, brig, snow, barque, merchantman, pirate frigate, East Indiaman, periagua, barco luengo
-   2026-11-14). Still to model: fluyt, galleon, navy sloop-of-war, two- and three-deckers (ships of the line).
+   2026-11-14; navy sloop-of-war, fluyt, galleon, 4th/3rd/2nd/1st rates 2026-11-14: all 19 done).
 4. Ports (trade, tavern, governor/nation reputation), boarding duel minigame, light
    campaign (aging, fame, treasure hunts). Scope: one region, 6–8 ports.

@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="ShipSpec" format=3]
+
+[ext_resource type="Script" path="res://scripts/ship_spec.gd" id="1_spec"]
+[ext_resource type="PackedScene" path="res://assets/ships/fluyt/fluyt.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_spec")
+id = "fluyt"
+display_name = "Fluyt"
+tier = "merchant"
+rarity = "common"
+length = 32.0
+beam = 7.2
+hull_height = 4.4
+mass_t = 125.0
+max_hull = 140.0
+draft = "medium"
+rig = 2
+speed_mult = 0.8
+turn_mult = 0.65
+max_crew = 30.0
+guns_per_side = 4
+gun_decks = 1
+cargo_t = 300.0
+masts = PackedStringArray("square", "square", "spanker")
+mast_height_frac = 0.8
+jib = true
+model = ExtResource("2_model")

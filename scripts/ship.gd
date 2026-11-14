@@ -224,7 +224,12 @@ func _apply_spec() -> void:
 	_rudder = rudder_torque * yaw_i / yaw_i0 * spec.turn_mult
 	var roll_i := mass * (_beam * _beam + _height * _height)
 	var roll_i0 := BASE_MASS * (BASE_BEAM * BASE_BEAM + BASE_HEIGHT * BASE_HEIGHT)
-	_heel = heel_torque * roll_i / roll_i0
+	# ...but never more than the buoyancy probes can right: their righting moment grows with
+	# mass x beam^2 / height scale, so tall hulls (galleons, ships of the line) would otherwise
+	# be blown flat. Equal to 1 for the sloop either way.
+	var righting := mass / BASE_MASS * _beam * _beam / _vscale
+	var righting0 := BASE_BEAM * BASE_BEAM
+	_heel = heel_torque * minf(roll_i / roll_i0, righting / righting0)
 
 	_curve = RIG_CURVES[spec.rig]
 	_irons_deg = (_curve[1] as Vector2).x
@@ -331,6 +336,10 @@ func length() -> float:
 
 func beam() -> float:
 	return _beam
+
+
+func hull_height() -> float:
+	return _height
 
 
 ## Angle off the wind (degrees) inside which this rig is "in irons".
@@ -917,7 +926,10 @@ func _build_rig(rig: Dictionary, spar: Material, canvas: Material) -> void:
 		var top: Vector3 = m["top"]
 		var mh := top.y - foot.y
 		if m["kind"] == "lateen":
-			_add_lateen_sail(foot, (m["head"] as Vector3).y - foot.y, minf(0.85 * _len, 1.7 * mh), spar, canvas)
+			# A lone lateen (barco luengo) is the whole rig; on a galleon's mizzen or
+			# bonaventure it's a much shorter yard.
+			var yard_len := minf(0.85 * _len, 1.7 * mh) if masts.size() == 1 else 1.15 * mh
+			_add_lateen_sail(foot, (m["head"] as Vector3).y - foot.y, yard_len, spar, canvas)
 		elif m["kind"] == "gaff" or m["kind"] == "spanker":
 			# Fore-and-aft sail aft of the mast, as long as the deck allows and clear of the
 			# next mast aft (schooner foresail, ketch mainsail). A "spanker" mizzen (full-rigged
@@ -933,6 +945,8 @@ func _build_rig(rig: Dictionary, spar: Material, canvas: Material) -> void:
 		else:
 			_add_square_sail(foot + Vector3.UP * 0.555 * mh, 0.37 * mh, 0.31 * mh, spar, canvas)
 			_add_square_sail(foot + Vector3.UP * 0.795 * mh, 0.29 * mh, 0.23 * mh, spar, canvas)
+			if _len > 41.0:  # galleons and ships of the line: topgallants too
+				_add_square_sail(foot + Vector3.UP * 0.95 * mh, 0.21 * mh, 0.145 * mh, spar, canvas)
 	var jib: Dictionary = rig["jib"]
 	if not jib.is_empty() and not (rig["masts"] as Array).is_empty():
 		var fore: Dictionary = rig["masts"][0]

@@ -6,9 +6,11 @@ const ISLAND_SEED := 1715
 const ENEMY_RESPAWN_DELAY := 10.0
 const ENEMY_FACTION := 1
 ## Debug: N adds an escort to the fleet, cycling through these (until capture exists).
-## The fleet holds only 3 escorts, so the newest ships go first to keep them reachable.
-const DEBUG_ESCORTS := ["periagua", "barco_luengo", "sloop", "brigantine", "pirate_frigate", "ketch",
-		"schooner", "brig", "snow", "barque", "merchantman", "east_indiaman"]
+## Once the fleet is full, N sends the oldest escort away and adds the next type, so every
+## ship can be reached.
+const DEBUG_ESCORTS := ["navy_sloop", "fluyt", "galleon", "fourth_rate", "third_rate", "second_rate",
+		"first_rate", "periagua", "barco_luengo", "sloop", "ketch", "schooner", "brigantine", "brig",
+		"snow", "barque", "merchantman", "pirate_frigate", "east_indiaman"]
 
 var ocean: Ocean
 var environment: Environment
@@ -89,8 +91,13 @@ func _unhandled_input(event: InputEvent) -> void:
 ## Debug stand-in for capturing: spawn an escort astern of the flagship and add it to
 ## the fleet. Cycles through DEBUG_ESCORTS.
 func _debug_add_escort() -> void:
-	if fleet.is_full() or player.is_sunk:
+	if player.is_sunk:
 		return
+	if fleet.is_full():
+		var oldest: Ship = fleet.escorts[0]
+		fleet.escorts.remove_at(0)
+		print("[fleet] debug: %s sent away" % oldest.spec.display_name)
+		oldest.queue_free()  # her captain frees itself
 	var id: String = DEBUG_ESCORTS[_debug_escort_index % DEBUG_ESCORTS.size()]
 	_debug_escort_index += 1
 	var h := player.heading_bearing()

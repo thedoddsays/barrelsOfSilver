@@ -90,7 +90,45 @@ SHIPS = {
                           masts=[("square", -0.27, 0.92), ("square", -0.02, 1.0), ("spanker", 0.22, 0.75)],
                           sprit_len=0.4, sprit_angle=17.0, bow_full=2.1, transom=0.7, sheer_bow=0.75,
                           qd=0.08, fc=-0.28, gun_span=(-0.3, 0.29)),
+    # Navy sloop-of-war: a small ship-rigged pirate hunter (mixed rig: gaff mizzen), navy paint.
+    "navy_sloop": dict(L=28.0, B=7.6, H=3.4, guns=7, mast_frac=0.82,
+                       masts=[("square", -0.27, 0.92), ("square", -0.02, 1.0), ("gaff", 0.22, 0.75)],
+                       sprit_len=0.44, sprit_angle=15.0, bow_full=1.5, transom=0.6,
+                       qd=0.12, fc=-0.3, gun_span=(-0.27, 0.1), navy=True),
+    # Fluyt: Dutch bulk carrier. Pear-shaped sections (strong tumblehome, flat floor), a narrow
+    # high stern, few guns.
+    "fluyt": dict(L=32.0, B=7.2, H=4.4, guns=4, mast_frac=0.8,
+                  masts=[("square", -0.28, 0.92), ("square", -0.03, 1.0), ("spanker", 0.2, 0.7)],
+                  sprit_len=0.4, sprit_angle=20.0, bow_full=2.4, transom=0.38, tumble=0.32, sec_k=1.2,
+                  sheer_stern=0.9, qd=0.16, fc=-0.36, gun_span=(-0.15, 0.1)),
+    # Galleon: two gun decks, a towering stern (quarterdeck plus poop), a high forecastle, a
+    # long beakhead, and lateen mizzen and bonaventure masts.
+    "galleon": dict(L=42.0, B=11.5, H=7.0, guns=20, decks=2, mast_frac=0.74,
+                    masts=[("square", -0.3, 0.9), ("square", -0.05, 1.0), ("lateen", 0.2, 0.6),
+                           ("lateen", 0.31, 0.45)],
+                    sprit_len=0.42, sprit_angle=28.0, bow_full=1.8, transom=0.62, tumble=0.2,
+                    sheer_bow=0.9, sheer_stern=0.8, qd=0.06, poop=0.22, fc=-0.33, beak=1.2,
+                    gun_span=(-0.3, 0.26)),
+    # Ships of the line: two or three gun decks of lidded ports between black wales, navy ochre.
+    "fourth_rate": dict(L=45.0, B=12.5, H=8.0, guns=25, decks=2, mast_frac=0.78,
+                        masts=[("square", -0.27, 0.92), ("square", -0.02, 1.0), ("spanker", 0.22, 0.75)],
+                        sprit_len=0.4, sprit_angle=20.0, bow_full=1.7, transom=0.66, tumble=0.18,
+                        qd=0.1, fc=-0.3, beak=0.5, gun_span=(-0.33, 0.3), navy=True),
+    "third_rate": dict(L=52.0, B=14.5, H=9.0, guns=37, decks=2, mast_frac=0.78,
+                       masts=[("square", -0.27, 0.92), ("square", -0.02, 1.0), ("spanker", 0.22, 0.75)],
+                       sprit_len=0.4, sprit_angle=20.0, bow_full=1.7, transom=0.66, tumble=0.18,
+                       qd=0.1, fc=-0.3, beak=0.5, gun_span=(-0.36, 0.33), navy=True),
+    "second_rate": dict(L=54.0, B=15.0, H=11.4, guns=45, decks=3, mast_frac=0.78,
+                        masts=[("square", -0.27, 0.92), ("square", -0.02, 1.0), ("spanker", 0.22, 0.75)],
+                        sprit_len=0.4, sprit_angle=21.0, bow_full=1.7, transom=0.66, tumble=0.2,
+                        qd=0.08, poop=0.27, fc=-0.3, beak=0.5, gun_span=(-0.36, 0.33), navy=True),
+    "first_rate": dict(L=58.0, B=16.0, H=12.0, guns=50, decks=3, mast_frac=0.78,
+                       masts=[("square", -0.27, 0.92), ("square", -0.02, 1.0), ("spanker", 0.22, 0.75)],
+                       sprit_len=0.4, sprit_angle=21.0, bow_full=1.7, transom=0.66, tumble=0.2,
+                       qd=0.08, poop=0.27, fc=-0.3, beak=0.5, gun_span=(-0.37, 0.34), navy=True),
 }
+
+DECK_GAP = 2.3  # metres between gun decks (people and guns don't scale with the ship)
 
 # Sloop baseline these ratios come from: L 16, B 4.6, H 2.2.
 BASE_L, BASE_B, BASE_H = 16.0, 4.6, 2.2
@@ -116,21 +154,32 @@ def setup(ship_id):
     C.SHEER_MID = 0.5 * H + C.BULWARK
     C.SHEER_LOW_Z = -0.031 * L
     C.SHEER_BOW_RISE = s.get("sheer_bow", 0.6) * sh
-    C.SHEER_STERN_RISE = 0.45 * sh
+    C.SHEER_STERN_RISE = s.get("sheer_stern", 0.45) * sh
     C.BOOT_TOP = -0.30 * sh
     C.WALE = (0.65 * sh, 0.35 * sh)
     C.TRANSOM_HALF = s.get("transom", 0.62)
     C.BOW_FULL = s.get("bow_full", 1.6)
-    C.TUMBLEHOME = 0.07
+    C.TUMBLEHOME = s.get("tumble", 0.07)
+    C.SEC_K = s.get("sec_k", 0.0)  # fuller, flatter-floored sections
     C.BULWARK_THICK = 0.12 * C.thick
     C.CROWN = 0.07 * sb
     C.MAST_FRAC = s["mast_frac"]
     C.MASTS = s["masts"]
     C.SPRIT_LEN = s["sprit_len"] * L
     C.SPRIT_ANGLE = s["sprit_angle"]
-    n = s["guns"]
     g0, g1 = s.get("gun_span", (-0.25, 0.22))  # ship.gd's spec layout uses -0.25 .. 0.22
-    C.GUN_Z = [(g0 + ((g1 - g0) * i / (n - 1) if n > 1 else (g1 - g0) / 2)) * L for i in range(n)]
+    C.DECKS = s.get("decks", 1)
+    C.NAVY = s.get("navy", False)
+    C.BEAK = s.get("beak", 0.0)
+    # Guns per row, lowest gun deck first (the lower rows take any odd guns). Row k's floor
+    # is k * DECK_GAP below the weather deck.
+    total = s["guns"]
+    counts = [total // C.DECKS + (1 if r < total % C.DECKS else 0) for r in range(C.DECKS)]
+    C.GUN_ROWS = []
+    for r, n in enumerate(counts):
+        zs = [(g0 + ((g1 - g0) * i / (n - 1) if n > 1 else (g1 - g0) / 2)) * L for i in range(n)]
+        C.GUN_ROWS.append((C.DECKS - 1 - r, zs))
+    C.GUN_Z = C.GUN_ROWS[-1][1]  # weather deck row
     C.OPEN = s.get("open", False)
     C.DOUBLE = s.get("double_ended", False)
     C.OARS = s.get("oars", 0)
@@ -140,9 +189,9 @@ def setup(ship_id):
         C.SHEER_MID = 0.5 * H + C.BULWARK
     C.QD = s["qd"] * L if "qd" in s else None
     C.FC = s["fc"] * L if "fc" in s else None
-    C.RAISE = 1.4 * C.thick  # quarterdeck / forecastle height above the main deck
-    C.ROWS = make_rows()
-    C.DECK_ROW = 16
+    C.POOP = s["poop"] * L if "poop" in s else None  # a second step up, aft of the quarterdeck
+    C.RAISE = min(1.4 * C.thick, 2.2)  # quarterdeck / forecastle height above the main deck
+    C.ROWS, C.ROW_MATS, C.DECK_ROW = make_rows()
 
 
 def to_bl(p):
@@ -183,7 +232,14 @@ def raise_at(z):
         r += C.RAISE * smoothstep(C.QD - RAMP, C.QD + RAMP, z)
     if C.FC is not None:
         r += C.RAISE * (1.0 - smoothstep(C.FC - RAMP, C.FC + RAMP, z))
+    if C.POOP is not None:
+        r += C.RAISE * smoothstep(C.POOP - RAMP, C.POOP + RAMP, z)
     return r
+
+
+def floor_k(z, k):
+    """Floor of gun deck k (0 = the weather deck, 1 = the one below...) at z."""
+    return deck(z) - k * DECK_GAP
 
 
 def sheer_top(z):  # top of the rail, stepping up over the quarterdeck and forecastle
@@ -215,7 +271,7 @@ def half_breadth(h, z):
         plan = 1.0 - (1.0 - wt) * s ** 2.2  # fine run aft into a transom
     hm = 0.6
     if h < hm:
-        k = 1.5 + 1.7 * plan  # V-shaped sections at the ends, fuller amidships
+        k = 1.5 + (1.7 + C.SEC_K) * plan  # V-shaped sections at the ends, fuller amidships
         sec = 1.0 - (1.0 - h / hm) ** k
     else:
         sec = 1.0 - C.TUMBLEHOME * ((h - hm) / (1.0 - hm)) ** 1.5
@@ -228,28 +284,43 @@ def hull_x(y, z):
 
 
 def make_rows():
-    """Hull rows, keel to rail. Rows sit exactly on the paint-band edges so the bands are
-    crisp; the wale and upper rows follow the sheer like real planking."""
-    rows = []
-    for f in (0.0, 0.03, 0.08, 0.15, 0.24, 0.35, 0.48, 0.62, 0.76, 0.89, 1.0):
-        rows.append(lambda z, f=f: C.KEEL + (C.BOOT_TOP - C.KEEL) * f)
+    """Hull rows, keel to rail, and the material of the band above each row. Rows sit
+    exactly on the paint-band edges so the bands are crisp; the wale and upper rows follow
+    the sheer like real planking. Returns (rows, mats, deck_row)."""
+    rows, mats = [], []
+
+    def add(fn, mat):
+        rows.append(fn)
+        mats.append(mat)
+
+    for i, f in enumerate((0.0, 0.03, 0.08, 0.15, 0.24, 0.35, 0.48, 0.62, 0.76, 0.89, 1.0)):
+        add(lambda z, f=f: C.KEEL + (C.BOOT_TOP - C.KEEL) * f, BOTTOM if i < 10 else TOPSIDES)
     if C.OPEN:
         g = GUNWALE * C.thick
-        rows.append(lambda z: floor_y())
-        rows.append(lambda z: (floor_y() + sheer(z) - g) / 2.0)
-        rows.append(lambda z: sheer(z) - g)
-        rows.append(lambda z: sheer(z))
-        return rows
-    for f in (1.0 / 3.0, 2.0 / 3.0):
-        rows.append(lambda z, f=f: C.BOOT_TOP + ((deck(z) - C.WALE[0]) - C.BOOT_TOP) * f)
-    rows.append(lambda z: deck(z) - C.WALE[0])
-    rows.append(lambda z: deck(z) - C.WALE[1])
-    rows.append(lambda z: deck(z) - 0.17 * C.sh)
-    rows.append(lambda z: deck(z))
-    rows.append(lambda z: deck(z) + 0.5 * C.BULWARK)
-    rows.append(lambda z: sheer(z))
-    rows.append(lambda z: sheer_top(z) + 0.0001)  # raised quarterdeck/forecastle bulwark (flat elsewhere)
-    return rows
+        add(lambda z: floor_y(), TOPSIDES)  # FLOOR_ROW
+        add(lambda z: (floor_y() + sheer(z) - g) / 2.0, TOPSIDES)
+        add(lambda z: sheer(z) - g, BLACK)  # gunwale
+        add(lambda z: sheer(z), TOPSIDES)
+        return rows, mats, None
+    if C.DECKS > 1:
+        # A black wale just under each gun deck; the ports sit in the band above it (navy
+        # ochre on warships).
+        band = STRAKE if C.NAVY else TOPSIDES
+        for k in range(C.DECKS - 1, -1, -1):
+            add(lambda z, k=k: floor_k(z, k) - 0.45, BLACK)
+            add(lambda z, k=k: floor_k(z, k) - 0.1, band)
+    else:
+        for f in (1.0 / 3.0, 2.0 / 3.0):
+            add(lambda z, f=f: C.BOOT_TOP + ((deck(z) - C.WALE[0]) - C.BOOT_TOP) * f, TOPSIDES)
+        add(lambda z: deck(z) - C.WALE[0], BLACK)
+        add(lambda z: deck(z) - C.WALE[1], TOPSIDES)
+        add(lambda z: deck(z) - 0.17 * C.sh, TOPSIDES)
+    deck_row = len(rows)
+    add(lambda z: deck(z), STRAKE)
+    add(lambda z: deck(z) + 0.5 * C.BULWARK, STRAKE)
+    add(lambda z: sheer(z), TOPSIDES)  # raised bulwarks over the quarterdeck/forecastle
+    add(lambda z: sheer_top(z) + 0.0001, TOPSIDES)  # (flat elsewhere)
+    return rows, mats, deck_row
 
 
 # Materials (index order)
@@ -268,17 +339,7 @@ def floor_y():
 
 
 def row_mat(r):
-    if C.OPEN:
-        return BOTTOM if r < 10 else (BLACK if r == 13 else TOPSIDES)
-    if r < 10:
-        return BOTTOM
-    if r == 13:
-        return BLACK  # wale
-    if r == C.DECK_ROW + 2:
-        return TOPSIDES  # raised bulwarks above the strake
-    if r >= C.DECK_ROW:
-        return STRAKE
-    return TOPSIDES
+    return C.ROW_MATS[r]
 
 
 # ---------------------------------------------------------------------------
@@ -426,7 +487,7 @@ def build_hull(mb):
     for r in range(R - 1):
         for j, want in ((T - 1, (0, 0, -1)), (0, (0, 0, 1))):
             mb.f([strip_pt(r, j, 1), strip_pt(r + 1, j, 1), strip_pt(r + 1, j, -1), strip_pt(r, j, -1)],
-                 row_mat(r) if j == T - 1 else (BOTTOM if r < 10 else (STRAKE if DR <= r < DR + 2 else TOPSIDES)),
+                 row_mat(r) if j == T - 1 else (TOPSIDES if row_mat(r) == BLACK else row_mat(r)),
                  False, want)
 
     if C.OPEN:
@@ -497,7 +558,7 @@ def build_hull(mb):
         for j in js:
             o = grid[R - 1][j]
             xe = max(o.x - bt + 0.03, 0.05)
-            y = deck(o.z) + C.RAISE
+            y = deck(o.z) + raise_at(o.z)
             col = []
             for k in range(K + 1):
                 s = -1.0 + 2.0 * k / K
@@ -508,62 +569,102 @@ def build_hull(mb):
             for k in range(K):
                 mb.f([ca[k], cb[k], cb[k + 1], ca[k + 1]], DECK, True, (0, 1, 0))
         o, xe, y, _ = pcols[0] if kind == "qd" else pcols[-1]
-        face = -1.0 if kind == "qd" else 1.0  # breast faces the waist
-        yb = deck(o.z) - 0.05
-        mb.f([mb.v((-xe, yb, o.z)), mb.v((xe, yb, o.z)), mb.v((xe, y + C.CROWN, o.z)), mb.v((-xe, y + C.CROWN, o.z))],
-             INNER, False, (0, 0, face))
-        zr = o.z + face * 0.05
-        box(mb, (0, y + C.CROWN + 0.9, zr), (2 * xe, 0.08, 0.12), BLACK)  # breast rail
-        nb = max(4, int(2 * xe / 0.5))
-        for k in range(nb + 1):
-            x = -xe + 2 * xe * k / nb
-            box(mb, (x, y + C.CROWN + 0.45, zr), (0.06, 0.9, 0.06), WOOD)  # balusters
-        for x in (-xe * 0.55, xe * 0.55):  # ladders down to the waist
-            for k in range(5):
-                f = (k + 0.5) / 5.0
-                box(mb, (x, deck_c(o.z) + (y - deck(o.z)) * f, o.z + face * (0.9 * (1.0 - f) + 0.1)),
-                    (0.7, 0.05, 0.22), WOOD)
+        breast(mb, o.z, deck(o.z), y, xe, -1.0 if kind == "qd" else 1.0)  # faces the waist
+    if C.POOP is not None:
+        zp = C.POOP - RAMP
+        xe = max(hull_x(sheer(zp), zp) - bt + 0.03, 0.05)
+        breast(mb, zp, deck(zp) + C.RAISE, deck(zp) + 2.0 * C.RAISE, xe, -1.0)
 
     # Keel
     k0 = C.FOREFOOT_Z + 0.025 * C.L
     box(mb, (0.0, C.KEEL - 0.1 * C.sh, (k0 + C.POST_FOOT_Z) / 2.0),
         (0.2 * C.thick, 0.24 * C.sh, C.POST_FOOT_Z - k0), BOTTOM)
 
-    # Cutwater: a fin ahead of the stem, black, from the waterline up to the bowsprit
+    # Cutwater: a fin ahead of the stem, black, from the waterline up to the bowsprit. On a
+    # galleon or a ship of the line it runs out into a beakhead with head rails.
     stem = [grid[r][T - 1] for r in range(9, R)]
     y0, y1 = stem[0].y, stem[-1].y
+    reach = (0.6 + C.BEAK) * C.sl
     pts = [(p.y, p.z) for p in stem]
     for p in reversed(stem):
         s = (p.y - y0) / (y1 - y0)
-        pts.append((p.y - 0.05 * C.sh * s, p.z - 0.6 * C.sl * s ** 0.8 - 0.02))
+        pts.append((p.y - 0.05 * C.sh * s, p.z - reach * s ** 0.8 - 0.02))
     prism(mb, pts, 0.09 * C.thick, BLACK)
-
-    # Stern windows on the transom (just proud of it)
-    zt = 0.375 * C.L
-    n_win = 2 if C.B < 5.5 else 3
-    half = hull_x(deck(zt) - 0.3 * C.sh, zt) * 0.62
-    w = half * 2.0 / (n_win * 2 + 1)
-    ya, yb = deck(zt) - 0.48 * C.sh, deck(zt) - 0.16 * C.sh
-    za = z_aft((ya - C.KEEL) / (sheer(zt) - C.KEEL)) + 0.03
-    zb = z_aft((yb - C.KEEL) / (sheer(zt) - C.KEEL)) + 0.03
-    for k in range(n_win):
-        xa = 0.3 * C.sb + k * (w * 1.4)
-        xb = xa + w
+    if C.BEAK > 0.0:
+        top = stem[-1]
+        tip = Vector((0.0, top.y - 0.05 * C.sh - 0.6, top.z - reach * 0.92))
+        zr = C.STEM_TOP_Z + 0.07 * C.L
         for side in (1, -1):
-            q = [(xa * side, ya, za), (xb * side, ya, za), (xb * side, yb, zb), (xa * side, yb, zb)]
-            mb.f([mb.v(p) for p in q], BLACK, False, (0, 0, 1))
+            for dy in (0.0, -0.9):
+                yr = deck(zr) + dy
+                cyl(mb, tip + Vector((0, dy * 0.6, 0.2)), (side * hull_x(yr, zr), yr, zr), 0.08, 0.08, WOOD, 6)
+        yp = tip.y - 1.1
+        zp0 = z_fore(min(max((yp - C.KEEL) / (sheer(C.STEM_TOP_Z) - C.KEEL), 0.0), 1.0))
+        box(mb, (0, yp, (tip.z + zp0) / 2.0), (1.4, 0.12, abs(zp0 - tip.z)), WOOD)  # beakhead grating
+
+    # Stern windows on the raked lower transom (just proud of it): a small row on single-deck
+    # ships, a wide gallery row for the deck below the weather deck on bigger ones.
+    zt = 0.375 * C.L
+    if C.DECKS == 1:
+        n_win = 2 if C.B < 5.5 else 3
+        half = hull_x(deck(zt) - 0.3 * C.sh, zt) * 0.62
+        w = half * 2.0 / (n_win * 2 + 1)
+        ya, yb = deck(zt) - 0.48 * C.sh, deck(zt) - 0.16 * C.sh
+        za = z_aft((ya - C.KEEL) / (sheer(zt) - C.KEEL)) + 0.03
+        zb = z_aft((yb - C.KEEL) / (sheer(zt) - C.KEEL)) + 0.03
+        for k in range(n_win):
+            xa = 0.3 * C.sb + k * (w * 1.4)
+            xb = xa + w
+            for side in (1, -1):
+                q = [(xa * side, ya, za), (xb * side, ya, za), (xb * side, yb, zb), (xa * side, yb, zb)]
+                mb.f([mb.v(p) for p in q], BLACK, False, (0, 0, 1))
+    else:
+        for k in range(1, max(2, C.DECKS - 1)):
+            ya, yb = floor_k(zt, k) + 0.6, floor_k(zt, k) + 1.6
+            za = z_aft((ya - C.KEEL) / (sheer(zt) - C.KEEL)) + 0.03
+            zb = z_aft((yb - C.KEEL) / (sheer(zt) - C.KEEL)) + 0.03
+            xt = hull_x(yb, zt) * C.TRANSOM_HALF * 1.2
+            nw = 7
+            for i in range(nw):
+                x0 = -xt + (2 * xt) * (i + 0.18) / nw
+                x1 = -xt + (2 * xt) * (i + 0.82) / nw
+                mb.f([mb.v((x0, ya, za)), mb.v((x1, ya, za)), mb.v((x1, yb, zb)), mb.v((x0, yb, zb))],
+                     BLACK, False, (0, 0, 1))
+            box(mb, (0, ya - 0.15, za + 0.2), (2 * xt + 0.4, 0.14, 0.5), STRAKE)  # gallery
     if C.QD is not None:
-        # Great-cabin windows under the quarterdeck: a row across the upright upper transom
+        # Great-cabin windows under the quarterdeck (and the poop): rows across the upright
+        # upper transom
         zw = z_aft(1.0) + 0.03
-        ya, yb = deck(zt) + 0.3 * C.RAISE, deck(zt) + 0.75 * C.RAISE
         xt = hull_x(sheer(zt), zt) * C.TRANSOM_HALF * 1.4
-        nw = 5 if C.B > 9 else 4
-        for k in range(nw):
-            x0 = -xt + (2 * xt) * (k + 0.15) / nw
-            x1 = -xt + (2 * xt) * (k + 0.85) / nw
-            mb.f([mb.v((x0, ya, zw)), mb.v((x1, ya, zw)), mb.v((x1, yb, zw)), mb.v((x0, yb, zw))], BLACK, False, (0, 0, 1))
-        box(mb, (0, deck(zt) + C.RAISE - 0.1, zw + 0.05), (2 * xt + 0.4, 0.12, 0.12), STRAKE)  # trim
+        nw = 7 if C.B > 12 else (5 if C.B > 9 else 4)
+        for lvl in range(2 if C.POOP is not None else 1):
+            base = deck(zt) + lvl * C.RAISE
+            ya, yb = base + 0.3 * C.RAISE, base + 0.75 * C.RAISE
+            for k in range(nw):
+                x0 = -xt + (2 * xt) * (k + 0.15) / nw
+                x1 = -xt + (2 * xt) * (k + 0.85) / nw
+                mb.f([mb.v((x0, ya, zw)), mb.v((x1, ya, zw)), mb.v((x1, yb, zw)), mb.v((x0, yb, zw))], BLACK, False, (0, 0, 1))
+            box(mb, (0, base + C.RAISE - 0.1, zw + 0.05), (2 * xt + 0.4, 0.12, 0.12), STRAKE)  # trim
     return grid
+
+
+def breast(mb, z, y_low, y, xe, face):
+    """The red front of a raised deck (from y_low up to its deck at y), with a rail of
+    balusters along its edge and two ladders down. face = -1 looks forward, +1 aft."""
+    mb.f([mb.v((-xe, y_low - 0.05, z)), mb.v((xe, y_low - 0.05, z)), mb.v((xe, y + C.CROWN, z)),
+          mb.v((-xe, y + C.CROWN, z))], INNER, False, (0, 0, face))
+    zr = z + face * 0.05
+    box(mb, (0, y + C.CROWN + 0.9, zr), (2 * xe, 0.08, 0.12), BLACK)  # breast rail
+    nb = max(4, int(2 * xe / 0.5))
+    for k in range(nb + 1):
+        x = -xe + 2 * xe * k / nb
+        box(mb, (x, y + C.CROWN + 0.45, zr), (0.06, 0.9, 0.06), WOOD)  # balusters
+    steps = max(5, int((y - y_low) / 0.3))
+    for x in (-xe * 0.55, xe * 0.55):  # ladders
+        for k in range(steps):
+            f = (k + 0.5) / steps
+            box(mb, (x, y_low + C.CROWN + (y - y_low) * f, z + face * ((y - y_low) * 0.65 * (1.0 - f) + 0.1)),
+                (0.7, 0.05, 0.22), WOOD)
 
 
 def build_open_inside(mb, grid, T, R):
@@ -697,10 +798,17 @@ def build_fittings(mb, markers):
     gap = (mz[1] - mz[0]) if len(mz) > 1 else 6.0
     blen = min(3.4 * math.sqrt(sl), gap - 1.6)
     hatch(mb, zc - 0.3 * sl, 1.5 * sb, 1.4 * sl)
-    build_boat(mb, zc, deck_c(zc) + 0.42, blen, 0.65 * min(math.sqrt(sb), 1.2))
+    # The boat rests on two chocks with its keel clear of the hatch grating (top ~0.25 above
+    # the deck) and of the deck's sheer along its length.
+    # Its size follows its length (sloop: 3.4 m long, 1.3 m wide, 0.5 m deep), so a big
+    # ship's longboat is a real boat, not a sloop's dinghy.
+    yk = max(deck_c(zc + t * blen / 2.0) for t in (-1.0, -0.5, 0.0, 0.5, 1.0)) + 0.34
+    bh, bd = 0.19 * blen, 0.147 * blen
+    build_boat(mb, zc, yk + bd, blen, bh, bd)
     for dz in (-0.4, 0.4):
         z = zc + dz * blen * 0.6
-        box(mb, (0, deck_c(z) + 0.2, z), (1.0 * min(math.sqrt(sb), 1.2), 0.2, 0.18), WOOD)
+        y_floor = deck(z)
+        box(mb, (0, (y_floor + yk + 0.03) / 2.0, z), (1.5 * bh, yk + 0.03 - y_floor, 0.18), WOOD)
 
     # Cabin skylight/companion aft, clear of any mast (on the quarterdeck if there is one)
     zk = 0.225 * L
@@ -712,18 +820,38 @@ def build_fittings(mb, markers):
     box(mb, (0, deck_top_c(zk) + 0.22, zk), (1.2 * min(sb, 1.4), 0.44, 1.3), WOOD)
     box(mb, (0, deck_top_c(zk) + 0.46, zk), (1.3 * min(sb, 1.4), 0.06, 1.4), BLACK)
 
-    # Guns: carriage on deck, barrel out through an open port
+    # Guns, lowest gun deck first (markers gun_N in that order, bow to stern in each row).
+    # Lower decks: a port with its red lid hinged up and the muzzle run out. Weather deck:
+    # carriage on deck, barrel out through an open port in the bulwark.
     g = min(1.25, math.sqrt(sh))
-    for gi, z in enumerate(C.GUN_Z):
-        yp = deck(z) + 0.33 * g
-        xo = hull_x(yp, z)
-        xi = max(xo - C.BULWARK_THICK, 0.3)
-        for side in (1, -1):
-            box(mb, (side * xo, yp, z), (0.08, 0.36 * g, 0.46 * g), BLACK)  # port opening
-            box(mb, (side * (xi - 0.42 * g), deck(z) + 0.2 * g, z), (0.7 * g, 0.3 * g, 0.46 * g), WOOD)
-            cyl(mb, (side * (xi - 0.85 * g), yp + 0.03, z), (side * (xo + 0.2), yp, z), 0.12 * g, 0.085 * g, IRON, 8)
-            cyl(mb, (side * (xo + 0.12), yp, z), (side * (xo + 0.22), yp, z), 0.105 * g, 0.105 * g, IRON, 8)
-        markers["gun_%d" % gi] = (xo + 0.25, yp, z)
+    gi = 0
+    for k, zs in C.GUN_ROWS:
+        for z in zs:
+            if k > 0:
+                yp = floor_k(z, k) + 0.6
+                xo = hull_x(yp, z)
+                ph, pw = 0.62, 0.7
+                for side in (1, -1):
+                    box(mb, (side * xo, yp, z), (0.1, ph, pw), BLACK)
+                    a = math.radians(115.0)  # lid swung up and out
+                    d = Vector((side * math.sin(a), -math.cos(a), 0.0))
+                    n = Vector((d.y, -d.x, 0.0))
+                    hinge = Vector((side * (xo + 0.04), yp + ph / 2.0, z))
+                    R = Matrix(((n.x, d.x, 0.0), (n.y, d.y, 0.0), (0.0, 0.0, 1.0)))
+                    box(mb, hinge + d * (ph / 2.0), (0.06, ph, pw), INNER, R)
+                    cyl(mb, (side * (xo - 0.3), yp - 0.05, z), (side * (xo + 0.45), yp - 0.05, z), 0.15, 0.12, IRON, 8)
+                markers["gun_%d" % gi] = (xo + 0.5, yp - 0.05, z)
+            else:
+                yp = deck(z) + 0.33 * g
+                xo = hull_x(yp, z)
+                xi = max(xo - C.BULWARK_THICK, 0.3)
+                for side in (1, -1):
+                    box(mb, (side * xo, yp, z), (0.08, 0.36 * g, 0.46 * g), BLACK)  # port opening
+                    box(mb, (side * (xi - 0.42 * g), deck(z) + 0.2 * g, z), (0.7 * g, 0.3 * g, 0.46 * g), WOOD)
+                    cyl(mb, (side * (xi - 0.85 * g), yp + 0.03, z), (side * (xo + 0.2), yp, z), 0.12 * g, 0.085 * g, IRON, 8)
+                    cyl(mb, (side * (xo + 0.12), yp, z), (side * (xo + 0.22), yp, z), 0.105 * g, 0.105 * g, IRON, 8)
+                markers["gun_%d" % gi] = (xo + 0.25, yp, z)
+            gi += 1
 
     ys = build_rudder(mb, tiller=C.QD is None)
     if C.QD is not None:
@@ -763,9 +891,9 @@ def build_rudder(mb, tiller):
     return ys
 
 
-def build_boat(mb, zc, y0, L, Bh):
-    """A small open boat, pointed at both ends: a simple lofted shell plus floorboards."""
-    D = 0.5
+def build_boat(mb, zc, y0, L, Bh, D=0.5):
+    """A small open boat, pointed at both ends: a simple lofted shell plus floorboards.
+    y0 = gunwale height, D = depth (keel at y0 - D)."""
     T, R = 18, 6
     grid = []
     for r in range(R):
@@ -884,15 +1012,16 @@ def build_rig(mb, markers):
         rope(mb, tops[i] + Vector((0, -0.5, 0)), heads[i - 1] + Vector((0, 0.3, 0)), 0.03 * rs)
 
     # Shrouds with ratlines, channels, deadeyes and chainplates; topmast shrouds; backstays
-    n_shrouds = 3 if L < 20 else (4 if L < 28 else 5)
+    n_shrouds = 3 if L < 20 else (4 if L < 28 else (5 if L < 44 else 6))
     for i, (kind, z, h) in enumerate(masts):
         if kind == "trysail":
             continue
         head = heads[i]
         for side in (1, -1):
-            zc_ch = z + 0.75 * sl
+            span = 0.6 * min(sl, 2.5) * (n_shrouds - 1)
+            # Channel just abaft the mast, kept clear of the stern (a galleon's bonaventure)
+            zc_ch = min(z + 0.75 * sl, C.TRANSOM_TOP_Z - 0.8 - (span + 0.5 * sl) / 2.0)
             ych = sheer_top(zc_ch) - 0.25 * sh
-            span = 0.6 * sl * (n_shrouds - 1)
             xo = hull_x(ych, zc_ch)
             box(mb, (side * (xo + 0.17 * C.thick), ych, zc_ch), (0.34 * C.thick, 0.07, span + 0.5 * sl), BLACK)
             lows, highs = [], []

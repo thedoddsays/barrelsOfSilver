@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="ShipSpec" format=3]
+
+[ext_resource type="Script" path="res://scripts/ship_spec.gd" id="1_spec"]
+[ext_resource type="PackedScene" path="res://assets/ships/fourth_rate/fourth_rate.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_spec")
+id = "fourth_rate"
+display_name = "4th rate"
+tier = "line"
+rarity = "rare"
+length = 45.0
+beam = 12.5
+hull_height = 8.0
+mass_t = 556.0
+max_hull = 600.0
+draft = "very deep"
+rig = 2
+speed_mult = 0.75
+turn_mult = 0.45
+max_crew = 350.0
+guns_per_side = 25
+gun_decks = 2
+cargo_t = 150.0
+masts = PackedStringArray("square", "square", "spanker")
+mast_height_frac = 0.78
+jib = true
+model = ExtResource("2_model")

@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="ShipSpec" format=3]
+
+[ext_resource type="Script" path="res://scripts/ship_spec.gd" id="1_spec"]
+[ext_resource type="PackedScene" path="res://assets/ships/navy_sloop/navy_sloop.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_spec")
+id = "navy_sloop"
+display_name = "Navy sloop-of-war"
+tier = "medium"
+rarity = "uncommon"
+length = 28.0
+beam = 7.6
+hull_height = 3.4
+mass_t = 89.0
+max_hull = 160.0
+draft = "medium"
+rig = 1
+speed_mult = 1.0
+turn_mult = 0.95
+max_crew = 120.0
+guns_per_side = 7
+gun_decks = 1
+cargo_t = 80.0
+masts = PackedStringArray("square", "square", "gaff")
+mast_height_frac = 0.82
+jib = true
+model = ExtResource("2_model")

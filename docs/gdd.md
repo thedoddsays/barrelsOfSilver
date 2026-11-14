@@ -183,6 +183,9 @@ publishing anything.
 | Ship visuals | Primitives (boxes, prisms, cylinders) built at runtime, ~30 draw calls per ship | Placeholder look; draw calls were the main render cost in the stress test | Script-generated Blender model per hull (sloop first), animated sails still built in code as curved canvas; ~15 draw calls per ship | 2026-11-13 |
 | Fleet targeting | Once a battle started, escorts fought any non-fleet ship within 250 m of the flagship | Owner: a passing trader or a ship trying to flee shouldn't be attacked just for being near a fight | Escorts fight only aggressors: ships that attacked the fleet or that the player attacked | 2026-11-13 |
 | Collision damage | Deciding who rammed whom from the contact surface's direction | Owner playtest: the rammer took more damage than the target. On angled hits Godot often reports the rammer's own bow or side face, so the target's speed looked like it was driving into the rammer | Judge each ship by its speed toward the point of contact; rammer now takes about 1/5 of what the target takes in live fights too | 2026-11-13 |
+| Open boats | Floorboards near the keel | The ocean is one opaque surface, so water showed right through the inside of the boat (owner) | Floorboards a quarter of the hull depth above the waterline | 2026-11-14 |
+| Hull vs. waves | Nothing stopped crests drawing inside a hull | Owner saw water clipping through ships in waves | Ocean shader skips water inside each afloat hull's outline above her deck (hull mask) | 2026-11-14 |
+| Heeling | Wind heel torque scaled with the hull's roll inertia, mass × (beam² + height²) | The buoyancy probes' righting moment only grows with mass × beam² ÷ height scale, so tall hulls were overpowered: the galleon and every rate capsized, the East Indiaman heeled 22° | Heel torque capped at what the hull can right (sloop unchanged); big ships heel 6–13° | 2026-11-14 |
 
 ---
 

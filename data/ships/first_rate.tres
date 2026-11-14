@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="ShipSpec" format=3]
+
+[ext_resource type="Script" path="res://scripts/ship_spec.gd" id="1_spec"]
+[ext_resource type="PackedScene" path="res://assets/ships/first_rate/first_rate.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_spec")
+id = "first_rate"
+display_name = "1st rate"
+tier = "line"
+rarity = "legendary"
+length = 58.0
+beam = 16.0
+hull_height = 12.0
+mass_t = 1375.0
+max_hull = 1700.0
+draft = "very deep"
+rig = 2
+speed_mult = 0.62
+turn_mult = 0.3
+max_crew = 850.0
+guns_per_side = 50
+gun_decks = 3
+cargo_t = 300.0
+masts = PackedStringArray("square", "square", "spanker")
+mast_height_frac = 0.78
+jib = true
+model = ExtResource("2_model")

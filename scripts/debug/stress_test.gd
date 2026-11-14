@@ -23,7 +23,8 @@ const BENCH_ZOOM := 300.0  ## camera distance during the benchmark, so the fight
 ## sea (lots of small ships, a few big ones). Launch with `-- --sloops` for sloops only.
 const STRESS_MIX := {"sloop": 4, "ketch": 2, "schooner": 1, "brigantine": 3, "brig": 2, "snow": 1,
 	"barque": 1, "merchantman": 2, "pirate_frigate": 1, "east_indiaman": 1,
-	"periagua": 1, "barco_luengo": 2}
+	"periagua": 1, "barco_luengo": 2, "navy_sloop": 2, "fluyt": 2, "galleon": 1, "fourth_rate": 1,
+	"third_rate": 1, "second_rate": 1, "first_rate": 1}
 
 var _pairs: Array = []  ## [ship_a, ship_b] per pair
 var _rig: CameraRig

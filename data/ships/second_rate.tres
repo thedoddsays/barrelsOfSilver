@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="ShipSpec" format=3]
+
+[ext_resource type="Script" path="res://scripts/ship_spec.gd" id="1_spec"]
+[ext_resource type="PackedScene" path="res://assets/ships/second_rate/second_rate.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_spec")
+id = "second_rate"
+display_name = "2nd rate"
+tier = "line"
+rarity = "legendary"
+length = 54.0
+beam = 15.0
+hull_height = 11.4
+mass_t = 1140.0
+max_hull = 1400.0
+draft = "very deep"
+rig = 2
+speed_mult = 0.65
+turn_mult = 0.35
+max_crew = 750.0
+guns_per_side = 45
+gun_decks = 3
+cargo_t = 250.0
+masts = PackedStringArray("square", "square", "spanker")
+mast_height_frac = 0.78
+jib = true
+model = ExtResource("2_model")

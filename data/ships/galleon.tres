@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="ShipSpec" format=3]
+
+[ext_resource type="Script" path="res://scripts/ship_spec.gd" id="1_spec"]
+[ext_resource type="PackedScene" path="res://assets/ships/galleon/galleon.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_spec")
+id = "galleon"
+display_name = "Galleon"
+tier = "heavy"
+rarity = "rare"
+length = 42.0
+beam = 11.5
+hull_height = 7.0
+mass_t = 418.0
+max_hull = 420.0
+draft = "deep"
+rig = 2
+speed_mult = 0.7
+turn_mult = 0.45
+max_crew = 300.0
+guns_per_side = 20
+gun_decks = 2
+cargo_t = 500.0
+masts = PackedStringArray("square", "square", "lateen", "lateen")
+mast_height_frac = 0.74
+jib = true
+model = ExtResource("2_model")

@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="ShipSpec" format=3]
+
+[ext_resource type="Script" path="res://scripts/ship_spec.gd" id="1_spec"]
+[ext_resource type="PackedScene" path="res://assets/ships/third_rate/third_rate.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_spec")
+id = "third_rate"
+display_name = "3rd rate"
+tier = "line"
+rarity = "very rare"
+length = 52.0
+beam = 14.5
+hull_height = 9.0
+mass_t = 838.0
+max_hull = 1000.0
+draft = "very deep"
+rig = 2
+speed_mult = 0.72
+turn_mult = 0.4
+max_crew = 550.0
+guns_per_side = 37
+gun_decks = 2
+cargo_t = 200.0
+masts = PackedStringArray("square", "square", "spanker")
+mast_height_frac = 0.78
+jib = true
+model = ExtResource("2_model")

@@ -61,6 +61,16 @@ func set_cruise(on: bool) -> void:
 	cruise_changed.emit(on)
 
 
+## Cruise distance and height scale with the ship (the defaults are for the 16 m sloop):
+## x = distance factor, y = height factor. Sub-linear, so a first rate isn't a speck.
+var _cruise_scale: Vector2:
+	get:
+		if target == null or not target.has_method("length"):
+			return Vector2.ONE
+		return Vector2(pow(maxf(target.length() / 16.0, 1.0), 0.65),
+				pow(maxf(target.hull_height() / 2.2, 1.0), 0.65))
+
+
 func _focus() -> Vector3:
 	var p := target.global_position
 	return Vector3(p.x, 0.0, p.z)
@@ -96,7 +106,7 @@ func _process(delta: float) -> void:
 
 	var roll := 0.0
 	if target:
-		var focus := _focus() + Vector3.UP * cruise_height * b
+		var focus := _focus() + Vector3.UP * cruise_height * _cruise_scale.y * b
 		global_position = global_position.lerp(focus, 1.0 - exp(-5.0 * delta))
 		if cruising:
 			var f := -target.global_basis.z
@@ -109,7 +119,7 @@ func _process(delta: float) -> void:
 	var t := clampf(inverse_lerp(min_distance, steepest_at, distance), 0.0, 1.0)
 	var map_pitch := lerpf(-32.0, -68.0, t)
 	var pitch := deg_to_rad(lerpf(map_pitch, cruise_pitch_deg, b))
-	var eff_distance := lerpf(distance, cruise_distance, b)
+	var eff_distance := lerpf(distance, cruise_distance * _cruise_scale.x, b)
 	rotation = Vector3(pitch, yaw, roll)
 	camera.position = Vector3(0.0, 0.0, eff_distance)
 	camera.fov = lerpf(map_fov, cruise_fov, b)
@@ -118,7 +128,8 @@ func _process(delta: float) -> void:
 		# Beyond the steepest-tilt distance, thin the haze as we pull back so the amount of
 		# fog between camera and sea stays the same (otherwise far zoom looks washed out).
 		var map_fog := MAP_FOG * minf(1.0, steepest_at / maxf(distance, 1.0))
-		environment.fog_density = lerpf(map_fog, CRUISE_FOG, b)
+		# Pulled back behind a big ship, thin the cruise fog a little so she isn't hazed out.
+		environment.fog_density = lerpf(map_fog, CRUISE_FOG / sqrt(_cruise_scale.x), b)
 	if sun:
 		sun.directional_shadow_max_distance = eff_distance + 200.0
 
